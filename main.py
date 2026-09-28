@@ -10,7 +10,7 @@ def root():
     }
 
 @app.get("/campaigns")
-def get_campaigns():
+def campaigns():
     return {
-        "message": "Google Ads campaigns endpoint"
+        "message": "campaign endpoint ready"
     }
