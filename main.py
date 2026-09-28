@@ -18,3 +18,9 @@ def config():
         "client_id_exists": os.getenv("GOOGLE_ADS_CLIENT_ID") is not None,
         "refresh_token_exists": os.getenv("GOOGLE_ADS_REFRESH_TOKEN") is not None
     }
+
+@app.get("/campaigns")
+def campaigns():
+    return {
+        "message": "Google Ads campaigns endpoint"
+    }
