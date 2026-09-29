@@ -54,7 +54,7 @@ def get_customer_id() -> str:
 def execute_query(
     client: GoogleAdsClient,
     query: str,
-) -> List[Any\]:
+) -> List[Any\\]:
     google_ads_service = client.get_service("GoogleAdsService")
 
     response = google_ads_service.search(
