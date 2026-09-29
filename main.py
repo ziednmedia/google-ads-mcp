@@ -10,6 +10,15 @@ def root():
         "status": "running"
     }
 
+@app.get("/campaigns")
+def campaigns():
+    return {
+        "customer_id": os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
+        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
+        "client_id_exists": os.getenv("GOOGLE_ADS_CLIENT_ID") is not None,
+        "refresh_token_exists": os.getenv("GOOGLE_ADS_REFRESH_TOKEN") is not None
+    }
+
 @app.get("/config")
 def config():
     return {
@@ -19,11 +28,4 @@ def config():
         "refresh_token_exists": os.getenv("GOOGLE_ADS_REFRESH_TOKEN") is not None
     }
 
-@app.get("/campaigns")
-def campaigns():
-    return {
-        "customer_id": os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "client_id_exists": os.getenv("GOOGLE_ADS_CLIENT_ID") is not None,
-        "refresh_token_exists": os.getenv("GOOGLE_ADS_REFRESH_TOKEN") is not None
-    }
+
