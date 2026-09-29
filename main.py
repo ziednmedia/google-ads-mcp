@@ -142,3 +142,82 @@ def campaign_performance():
         return {
             "error": str(e)
         }
+
+@app.get("/top-campaigns")
+def top_campaigns():
+
+    config = {
+        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
+        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
+        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
+        "use_proto_plus": True
+    }
+
+    try:
+
+        client = GoogleAdsClient.load_from_dict(config)
+
+        ga_service = client.get_service("GoogleAdsService")
+
+        query = """
+            SELECT
+                campaign.id,
+                campaign.name,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM campaign
+            WHERE segments.date DURING LAST_30_DAYS
+        """
+
+        response = ga_service.search(
+            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
+            query=query,
+        )
+
+        data = []
+
+        for row in response:
+
+            cost = row.metrics.cost_micros / 1000000
+            conversions = row.metrics.conversions
+            conversion_value = row.metrics.conversions_value
+
+            cpa = None
+            roas = None
+
+            if conversions > 0:
+                cpa = round(cost / conversions, 2)
+
+            if cost > 0:
+                roas = round(conversion_value / cost, 2)
+
+            data.append({
+                "campaign_id": row.campaign.id,
+                "campaign_name": row.campaign.name,
+                "cost": round(cost, 2),
+                "conversions": round(conversions, 2),
+                "conversion_value": round(conversion_value, 2),
+                "cpa": cpa,
+                "roas": roas
+            })
+
+        filtered = [
+            c for c in data
+            if c["roas"] is not None
+        ]
+
+        filtered.sort(
+            key=lambda x: x["roas"],
+            reverse=True
+        )
+
+        return filtered[:10]
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
