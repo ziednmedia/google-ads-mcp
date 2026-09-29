@@ -14,7 +14,7 @@ def root():
 @app.get("/version")
 def version():
     return {
-        "version": "2026-09-28-v1"
+        "version": "2026-09-28-v2"
     }
 @app.get("/config")
 def config():
