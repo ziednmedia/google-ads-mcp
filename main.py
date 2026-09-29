@@ -891,24 +891,25 @@ def optimization_opportunities(
 
             if broad_waste_keywords:
                 add_opportunity(
-                    opportunities,
-                    "HIGH",
-                    "MATCH_               "Requêtes larges avec dépense sans conversion",
-                    (
-                        f"{len(broad_waste_keywords)} mot(s)-clé(s) "
-                        f"en requête large ont au moins 5 clics, "
-                        f"10 $ de coût et aucune conversion."
-                    ),
-                    (
-                        "Examiner les termes de recherche. Évaluer "
-                        "Phrase Match, Exact Match ou des mots-clés "
-                        "négatifs. Ne pas changer automatiquement le "
-                        "type de correspondance."
-                    ),
-                    {
-                        "keywords": broad_waste_keywords[:25]
-                    },
-                )
+    opportunities,
+    "HIGH",
+    "MATCH_TYPE",
+    "Requêtes larges avec dépense sans conversion",
+    (
+        f"{len(broad_waste_keywords)} mot(s)-clé(s) "
+        f"en requête large ont au moins 5 clics, "
+        f"10 $ de coût et aucune conversion."
+    ),
+    (
+        "Examiner les termes de recherche. Évaluer "
+        "Phrase Match, Exact Match ou des mots-clés "
+        "négatifs. Ne pas changer automatiquement le "
+        "type de correspondance."
+    ),
+    {
+        "keywords": broad_waste_keywords[:25]
+    },
+)
 
             audit_coverage["keyword_quality"] = "SUCCESS"
 
