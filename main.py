@@ -18,7 +18,11 @@ def campaigns():
         "client_id_exists": os.getenv("GOOGLE_ADS_CLIENT_ID") is not None,
         "refresh_token_exists": os.getenv("GOOGLE_ADS_REFRESH_TOKEN") is not None
     }
-
+@app.get("/version")
+def version():
+    return {
+        "version": "2026-09-28-v1"
+    }
 @app.get("/config")
 def config():
     return {
