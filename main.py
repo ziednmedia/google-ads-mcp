@@ -95,7 +95,8 @@ def campaign_performance():
                 metrics.impressions,
                 metrics.clicks,
                 metrics.cost_micros,
-                metrics.conversions
+                metrics.conversions,
+                metrics.conversions_value
             FROM campaign
             WHERE segments.date DURING LAST_30_DAYS
         """
@@ -109,14 +110,19 @@ def campaign_performance():
 
         for row in response:
 
+            cost = row.metrics.cost_micros / 1000000
             clicks = row.metrics.clicks
             conversions = row.metrics.conversions
-            cost = row.metrics.cost_micros / 1000000
+            conversion_value = row.metrics.conversions_value
 
             cpa = None
+            roas = None
 
             if conversions > 0:
                 cpa = round(cost / conversions, 2)
+
+            if cost > 0:
+                roas = round(conversion_value / cost, 2)
 
             data.append({
                 "campaign_id": row.campaign.id,
@@ -124,8 +130,10 @@ def campaign_performance():
                 "impressions": row.metrics.impressions,
                 "clicks": clicks,
                 "cost": round(cost, 2),
-                "conversions": conversions,
-                "cpa": cpa
+                "conversions": round(conversions, 2),
+                "conversion_value": round(conversion_value, 2),
+                "cpa": cpa,
+                "roas": roas
             })
 
         return data
