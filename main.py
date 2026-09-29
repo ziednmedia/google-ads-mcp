@@ -1565,12 +1565,80 @@ def optimization_opportunities(
             if current_priority in priority_counts:
                 priority_counts[current_priority] += 1
 
+        campaign_health = "HEALTHY"
+
+if roas is not None and roas >= 10:
+    campaign_health = "EXCELLENT"
+elif roas is not None and roas < 2:
+    campaign_health = "AT_RISK"
+
+main_strength = (
+    f"ROAS de {roas} et CPA de {cpa}"
+)
+
+main_risk = "Aucun risque majeur détecté"
+
+recommended_first_action = (
+    "Continuer la surveillance"
+)
+
+estimated_priority = "LOW"
+
+for opportunity in opportunities:
+
+    if opportunity["priority"] == "HIGH":
+
+        estimated_priority = "HIGH"
+
+        if opportunity["category"] == "IMPRESSION_SHARE_BUDGET":
+
+            main_risk = (
+                "Perte importante de part d'impressions due au budget"
+            )
+
+            recommended_first_action = (
+                "Évaluer une augmentation progressive du budget"
+            )
+
+            break
+
+        elif opportunity["category"] == "SEARCH_TERMS":
+
+            main_risk = (
+                "Dépenses sur des termes de recherche sans conversion"
+            )
+
+            recommended_first_action = (
+                "Analyser les termes de recherche"
+            )
+
+            break
+
+        elif opportunity["category"] == "MATCH_TYPE":
+
+            main_risk = (
+                "Mots-clés Broad Match peu efficaces"
+            )
+
+            recommended_first_action = (
+                "Évaluer Phrase Match ou Exact Match"
+            )
+
+            break
+        
         return {
             "mode": "ON_DEMAND_ANALYSIS",
             "automatic_action": False,
             "requires_human_confirmation": True,
             "status": "RECOMMENDATION_ONLY",
             "campaign": campaign_summary,
+            "executive_summary": {
+    "campaign_health": campaign_health,
+    "main_strength": main_strength,
+    "main_risk": main_risk,
+    "recommended_first_action": recommended_first_action,
+    "estimated_priority": estimated_priority
+},
             "summary": {
                 "opportunities_count": len(
                     opportunities
