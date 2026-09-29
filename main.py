@@ -221,3 +221,68 @@ def top_campaigns():
         return {
             "error": str(e)
         }
+
+@app.get("/keywords")
+def keywords():
+
+    config = {
+        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
+        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
+        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
+        "use_proto_plus": True
+    }
+
+    try:
+
+        client = GoogleAdsClient.load_from_dict(config)
+
+        ga_service = client.get_service("GoogleAdsService")
+
+        query = """
+            SELECT
+                campaign.name,
+                ad_group.name,
+                ad_group_criterion.keyword.text,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions
+            FROM keyword_view
+            WHERE segments.date DURING LAST_30_DAYS
+        """
+
+        response = ga_service.search(
+            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
+            query=query,
+        )
+
+        data = []
+
+        for row in response:
+
+            cost = row.metrics.cost_micros / 1000000
+            conversions = row.metrics.conversions
+
+            cpa = None
+
+            if conversions > 0:
+                cpa = round(cost / conversions, 2)
+
+            data.append({
+                "campaign": row.campaign.name,
+                "ad_group": row.ad_group.name,
+                "keyword": row.ad_group_criterion.keyword.text,
+                "impressions": row.metrics.impressions,
+                "clicks": row.metrics.clicks,
+                "cost": round(cost, 2),
+                "conversions": round(conversions, 2),
+                "cpa": cpa
+            })
+
+        return data
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
