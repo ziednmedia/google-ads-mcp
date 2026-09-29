@@ -1565,67 +1565,101 @@ def optimization_opportunities(
             if current_priority in priority_counts:
                 priority_counts[current_priority] += 1
 
+        # ----------------------------------------------------
+        # SYNTHÈSE EXÉCUTIVE
+        # ----------------------------------------------------
+
+        roas_value = campaign_summary.get("roas")
+        cpa_value = campaign_summary.get("cpa")
+
         campaign_health = "HEALTHY"
 
-if roas is not None and roas >= 10:
-    campaign_health = "EXCELLENT"
-elif roas is not None and roas < 2:
-    campaign_health = "AT_RISK"
+        if roas_value is not None and roas_value >= 10:
+            campaign_health = "EXCELLENT"
+        elif roas_value is not None and roas_value < 2:
+            campaign_health = "AT_RISK"
 
-main_strength = (
-    f"ROAS de {roas} et CPA de {cpa}"
-)
+        if roas_value is not None and cpa_value is not None:
+            main_strength = (
+                f"ROAS de {roas_value} et CPA de {cpa_value}"
+            )
+        elif roas_value is not None:
+            main_strength = f"ROAS de {roas_value}"
+        elif cpa_value is not None:
+            main_strength = f"CPA de {cpa_value}"
+        else:
+            main_strength = (
+                "Données insuffisantes pour déterminer "
+                "le principal point fort"
+            )
 
-main_risk = "Aucun risque majeur détecté"
+        main_risk = "Aucun risque majeur détecté"
+        recommended_first_action = "Continuer la surveillance"
+        estimated_priority = "LOW"
 
-recommended_first_action = (
-    "Continuer la surveillance"
-)
+        high_priority_opportunities = [
+            opportunity
+            for opportunity in opportunities
+            if opportunity.get("priority") == "HIGH"
+        ]
 
-estimated_priority = "LOW"
+        medium_priority_opportunities = [
+            opportunity
+            for opportunity in opportunities
+            if opportunity.get("priority") == "MEDIUM"
+        ]
 
-for opportunity in opportunities:
+        if high_priority_opportunities:
+            estimated_priority = "HIGH"
 
-    if opportunity["priority"] == "HIGH":
+            first_priority_opportunity = (
+                high_priority_opportunities[0]
+            )
 
-        estimated_priority = "HIGH"
-
-        if opportunity["category"] == "IMPRESSION_SHARE_BUDGET":
-
-            main_risk = (
-                "Perte importante de part d'impressions due au budget"
+            main_risk = first_priority_opportunity.get(
+                "title",
+                "Une opportunité prioritaire a été détectée",
             )
 
             recommended_first_action = (
-                "Évaluer une augmentation progressive du budget"
+                first_priority_opportunity.get(
+                    "recommendation",
+                    (
+                        "Examiner l’opportunité avant "
+                        "toute intervention"
+                    ),
+                )
             )
 
-            break
+        elif medium_priority_opportunities:
+            estimated_priority = "MEDIUM"
 
-        elif opportunity["category"] == "SEARCH_TERMS":
+            first_priority_opportunity = (
+                medium_priority_opportunities[0]
+            )
 
-            main_risk = (
-                "Dépenses sur des termes de recherche sans conversion"
+            main_risk = first_priority_opportunity.get(
+                "title",
+                (
+                    "Une opportunité de priorité moyenne "
+                    "a été détectée"
+                ),
             )
 
             recommended_first_action = (
-                "Analyser les termes de recherche"
+                first_priority_opportunity.get(
+                    "recommendation",
+                    (
+                        "Examiner l’opportunité avant "
+                        "toute intervention"
+                    ),
+                )
             )
 
-            break
+        # ----------------------------------------------------
+        # RÉPONSE JSON
+        # ----------------------------------------------------
 
-        elif opportunity["category"] == "MATCH_TYPE":
-
-            main_risk = (
-                "Mots-clés Broad Match peu efficaces"
-            )
-
-            recommended_first_action = (
-                "Évaluer Phrase Match ou Exact Match"
-            )
-
-            break
-        
         return {
             "mode": "ON_DEMAND_ANALYSIS",
             "automatic_action": False,
@@ -1633,12 +1667,14 @@ for opportunity in opportunities:
             "status": "RECOMMENDATION_ONLY",
             "campaign": campaign_summary,
             "executive_summary": {
-    "campaign_health": campaign_health,
-    "main_strength": main_strength,
-    "main_risk": main_risk,
-    "recommended_first_action": recommended_first_action,
-    "estimated_priority": estimated_priority
-},
+                "campaign_health": campaign_health,
+                "main_strength": main_strength,
+                "main_risk": main_risk,
+                "recommended_first_action": (
+                    recommended_first_action
+                ),
+                "estimated_priority": estimated_priority,
+            },
             "summary": {
                 "opportunities_count": len(
                     opportunities
@@ -1659,6 +1695,13 @@ for opportunity in opportunities:
                 "Chaque recommandation doit être validée par "
                 "une personne qualifiée avant toute application."
             ),
+        }
+
+    except Exception as error:
+        return {
+            "error": str(error),
+            "campaign_id": campaign_id,
+            "automatic_action": False,
         }
 
     except Exception as error:
