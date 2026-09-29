@@ -350,3 +350,67 @@ def search_terms():
         return {
             "error": str(e)
         }
+@app.get("/negative-keyword-opportunities")
+def negative_keyword_opportunities():
+
+    config = {
+        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
+        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
+        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
+        "use_proto_plus": True
+    }
+
+    try:
+
+        client = GoogleAdsClient.load_from_dict(config)
+
+        ga_service = client.get_service("GoogleAdsService")
+
+        query = """
+            SELECT
+                campaign.name,
+                search_term_view.search_term,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions
+            FROM search_term_view
+            WHERE segments.date DURING LAST_30_DAYS
+        """
+
+        response = ga_service.search(
+            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
+            query=query,
+        )
+
+        data = []
+
+        for row in response:
+
+            cost = row.metrics.cost_micros / 1000000
+
+            if (
+                row.metrics.clicks >= 5
+                and row.metrics.conversions == 0
+                and cost > 10
+            ):
+
+                data.append({
+                    "campaign": row.campaign.name,
+                    "search_term": row.search_term_view.search_term,
+                    "clicks": row.metrics.clicks,
+                    "cost": round(cost, 2),
+                    "conversions": row.metrics.conversions
+                })
+
+        data.sort(
+            key=lambda x: x["cost"],
+            reverse=True
+        )
+
+        return data[:100]
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
