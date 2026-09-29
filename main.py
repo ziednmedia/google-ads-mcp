@@ -1,171 +1,211 @@
 import os
-from fastapi import FastAPI
+from typing import Any, Dict, List, Optional
 
-app = FastAPI()
+from fastapi import FastAPI, Query
+from google.ads.googleads.client import GoogleAdsClient
+
+
+app = FastAPI(
+    title="Google Ads Optimization API",
+    version="1.0.0",
+    description=(
+        "API Google Ads en lecture seule pour analyser les campagnes "
+        "et identifier des opportunités d'optimisation."
+    ),
+)
+
+
+# ============================================================
+# CONFIGURATION GOOGLE ADS
+# ============================================================
+
+def get_google_ads_client() -> GoogleAdsClient:
+    config = {
+        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
+        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
+        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
+        "use_proto_plus": True,
+    }
+
+    missing = [
+        key
+        for key, value in config.items()
+        if key != "use_proto_plus" and not value
+    ]
+
+    if missing:
+        raise ValueError(
+            "Variables Google Ads manquantes : " + ", ".join(missing)
+        )
+
+    return GoogleAdsClient.load_from_dict(config)
+
+
+def get_customer_id() -> str:
+    customer_id = os.getenv("GOOGLE_ADS_CUSTOMER_ID")
+
+    if not customer_id:
+        raise ValueError("GOOGLE_ADS_CUSTOMER_ID est manquant.")
+
+    return customer_id.replace("-", "").strip()
+
+
+def execute_query(
+    client: GoogleAdsClient,
+    query: str,
+) -> List[Any\]:
+    google_ads_service = client.get_service("GoogleAdsService")
+
+    response = google_ads_service.search(
+        customer_id=get_customer_id(),
+        query=query,
+    )
+
+    return list(response)
+
+
+def safe_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def enum_name(value: Any) -> str:
+    try:
+        return value.name
+    except AttributeError:
+        return str(value)
+
+
+def add_opportunity(
+    opportunities: List[Dict[str, Any]],
+    priority: str,
+    category: str,
+    title: str,
+    observation: str,
+    recommendation: str,
+    evidence: Optional[Dict[str, Any]] = None,
+) -> None:
+    opportunities.append(
+        {
+            "priority": priority,
+            "category": category,
+            "title": title,
+            "observation": observation,
+            "recommendation": recommendation,
+            "evidence": evidence or {},
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+            "status": "RECOMMENDATION_ONLY",
+        }
+    )
+
+
+def priority_order(priority: str) -> int:
+    priorities = {
+        "CRITICAL": 0,
+        "HIGH": 1,
+        "MEDIUM": 2,
+        "LOW": 3,
+        "INFO": 4,
+    }
+
+    return priorities.get(priority, 99)
+
+
+# ============================================================
+# ROUTES DE BASE
+# ============================================================
 
 @app.get("/")
 def root():
     return {
-        "name": "Google Ads MCP",
-        "status": "running"
+        "name": "Google Ads Optimization API",
+        "status": "running",
+        "mode": "READ_ONLY",
+        "automatic_actions": False,
     }
 
 
-@app.get("/version")
-def version():
-    return {
-        "version": "2026-09-28-v2"
-    }
 @app.get("/config")
 def config():
     return {
         "customer_id": os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "client_id_exists": os.getenv("GOOGLE_ADS_CLIENT_ID") is not None,
-        "refresh_token_exists": os.getenv("GOOGLE_ADS_REFRESH_TOKEN") is not None
+        "login_customer_id": os.getenv(
+            "GOOGLE_ADS_LOGIN_CUSTOMER_ID"
+        ),
+        "client_id_exists": bool(
+            os.getenv("GOOGLE_ADS_CLIENT_ID")
+        ),
+        "client_secret_exists": bool(
+            os.getenv("GOOGLE_ADS_CLIENT_SECRET")
+        ),
+        "refresh_token_exists": bool(
+            os.getenv("GOOGLE_ADS_REFRESH_TOKEN")
+        ),
     }
 
-from google.ads.googleads.client import GoogleAdsClient
+
+# ============================================================
+# CAMPAGNES
+# ============================================================
 
 @app.get("/campaigns")
 def campaigns():
-
-    config = {
-        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "use_proto_plus": True
-    }
-
     try:
-        client = GoogleAdsClient.load_from_dict(config)
-
-        ga_service = client.get_service("GoogleAdsService")
-
-        query = """
-            SELECT
-                campaign.id,
-                campaign.name
-            FROM campaign
-            LIMIT 20
-        """
-
-        response = ga_service.search(
-            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-            query=query,
-        )
-
-        campaigns = []
-
-        for row in response:
-            campaigns.append({
-                "id": row.campaign.id,
-                "name": row.campaign.name
-            })
-
-        return campaigns
-
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
-
-@app.get("/campaign-performance")
-def campaign_performance():
-
-    config = {
-        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "use_proto_plus": True
-    }
-
-    try:
-
-        client = GoogleAdsClient.load_from_dict(config)
-
-        ga_service = client.get_service("GoogleAdsService")
+        client = get_google_ads_client()
 
         query = """
             SELECT
                 campaign.id,
                 campaign.name,
-                metrics.impressions,
-                metrics.clicks,
-                metrics.cost_micros,
-                metrics.conversions,
-                metrics.conversions_value
+                campaign.status,
+                campaign.advertising_channel_type
             FROM campaign
-            WHERE segments.date DURING LAST_30_DAYS
+            ORDER BY campaign.name
         """
 
-        response = ga_service.search(
-            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-            query=query,
-        )
+        response = execute_query(client, query)
 
         data = []
 
         for row in response:
-
-            cost = row.metrics.cost_micros / 1000000
-            clicks = row.metrics.clicks
-            conversions = row.metrics.conversions
-            conversion_value = row.metrics.conversions_value
-
-            cpa = None
-            roas = None
-
-            if conversions > 0:
-                cpa = round(cost / conversions, 2)
-
-            if cost > 0:
-                roas = round(conversion_value / cost, 2)
-
-            data.append({
-                "campaign_id": row.campaign.id,
-                "campaign_name": row.campaign.name,
-                "impressions": row.metrics.impressions,
-                "clicks": clicks,
-                "cost": round(cost, 2),
-                "conversions": round(conversions, 2),
-                "conversion_value": round(conversion_value, 2),
-                "cpa": cpa,
-                "roas": roas
-            })
+            data.append(
+                {
+                    "campaign_id": str(row.campaign.id),
+                    "campaign_name": row.campaign.name,
+                    "status": enum_name(row.campaign.status),
+                    "channel_type": enum_name(
+                        row.campaign.advertising_channel_type
+                    ),
+                }
+            )
 
         return data
 
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
+    except Exception as error:
+        return {"error": str(error)}
 
-@app.get("/top-campaigns")
-def top_campaigns():
 
-    config = {
-        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "use_proto_plus": True
-    }
+# ============================================================
+# PERFORMANCE DES CAMPAGNES
+# ============================================================
 
+@app.get("/campaign-performance")
+def campaign_performance():
     try:
-
-        client = GoogleAdsClient.load_from_dict(config)
-
-        ga_service = client.get_service("GoogleAdsService")
+        client = get_google_ads_client()
 
         query = """
             SELECT
                 campaign.id,
                 campaign.name,
+                campaign.status,
                 metrics.impressions,
                 metrics.clicks,
+                metrics.ctr,
                 metrics.cost_micros,
                 metrics.conversions,
                 metrics.conversions_value
@@ -173,244 +213,1386 @@ def top_campaigns():
             WHERE segments.date DURING LAST_30_DAYS
         """
 
-        response = ga_service.search(
-            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-            query=query,
-        )
+        response = execute_query(client, query)
 
         data = []
 
         for row in response:
+            cost = row.metrics.cost_micros / 1_000_000
+            conversions = safe_float(row.metrics.conversions)
+            conversion_value = safe_float(
+                row.metrics.conversions_value
+            )
 
-            cost = row.metrics.cost_micros / 1000000
-            conversions = row.metrics.conversions
-            conversion_value = row.metrics.conversions_value
+            cpa = (
+                round(cost / conversions, 2)
+                if conversions > 0
+                else None
+            )
 
-            cpa = None
-            roas = None
+            roas = (
+                round(conversion_value / cost, 2)
+                if cost > 0
+                else None
+            )
 
-            if conversions > 0:
-                cpa = round(cost / conversions, 2)
+            data.append(
+                {
+                    "campaign_id": str(row.campaign.id),
+                    "campaign_name": row.campaign.name,
+                    "status": enum_name(row.campaign.status),
+                    "impressions": row.metrics.impressions,
+                    "clicks": row.metrics.clicks,
+                    "ctr": round(
+                        safe_float(row.metrics.ctr) * 100,
+                        2,
+                    ),
+                    "cost": round(cost, 2),
+                    "conversions": round(conversions, 2),
+                    "conversion_value": round(
+                        conversion_value,
+                        2,
+                    ),
+                    "cpa": cpa,
+                    "roas": roas,
+                }
+            )
 
-            if cost > 0:
-                roas = round(conversion_value / cost, 2)
+        return data
 
-            data.append({
-                "campaign_id": row.campaign.id,
-                "campaign_name": row.campaign.name,
-                "cost": round(cost, 2),
-                "conversions": round(conversions, 2),
-                "conversion_value": round(conversion_value, 2),
-                "cpa": cpa,
-                "roas": roas
-            })
+    except Exception as error:
+        return {"error": str(error)}
 
-        filtered = [
-            c for c in data
-            if c["roas"] is not None
-        ]
 
-        filtered.sort(
-            key=lambda x: x["roas"],
-            reverse=True
-        )
+# ============================================================
+# TOP CAMPAGNES
+# ============================================================
 
-        return filtered[:10]
+@app.get("/top-campaigns")
+def top_campaigns(
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    performance = campaign_performance()
 
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
+    if isinstance(performance, dict) and "error" in performance:
+        return performance
+
+    campaigns_with_roas = [
+        campaign
+        for campaign in performance
+        if campaign.get("roas") is not None
+    ]
+
+    campaigns_with_roas.sort(
+        key=lambda value: value["roas"],
+        reverse=True,
+    )
+
+    return campaigns_with_roas[:limit]
+
+
+# ============================================================
+# MOTS-CLÉS
+# ============================================================
 
 @app.get("/keywords")
 def keywords():
-
-    config = {
-        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "use_proto_plus": True
-    }
-
     try:
-
-        client = GoogleAdsClient.load_from_dict(config)
-
-        ga_service = client.get_service("GoogleAdsService")
+        client = get_google_ads_client()
 
         query = """
             SELECT
+                campaign.id,
                 campaign.name,
+                ad_group.id,
                 ad_group.name,
+                ad_group_criterion.criterion_id,
                 ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type,
+                ad_group_criterion.status,
                 metrics.impressions,
                 metrics.clicks,
+                metrics.ctr,
                 metrics.cost_micros,
                 metrics.conversions
             FROM keyword_view
             WHERE segments.date DURING LAST_30_DAYS
         """
 
-        response = ga_service.search(
-            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-            query=query,
-        )
+        response = execute_query(client, query)
 
         data = []
 
         for row in response:
+            cost = row.metrics.cost_micros / 1_000_000
+            conversions = safe_float(row.metrics.conversions)
 
-            cost = row.metrics.cost_micros / 1000000
-            conversions = row.metrics.conversions
+            cpa = (
+                round(cost / conversions, 2)
+                if conversions > 0
+                else None
+            )
 
-            cpa = None
-
-            if conversions > 0:
-                cpa = round(cost / conversions, 2)
-
-            data.append({
-                "campaign": row.campaign.name,
-                "ad_group": row.ad_group.name,
-                "keyword": row.ad_group_criterion.keyword.text,
-                "impressions": row.metrics.impressions,
-                "clicks": row.metrics.clicks,
-                "cost": round(cost, 2),
-                "conversions": round(conversions, 2),
-                "cpa": cpa
-            })
+            data.append(
+                {
+                    "campaign_id": str(row.campaign.id),
+                    "campaign": row.campaign.name,
+                    "ad_group_id": str(row.ad_group.id),
+                    "ad_group": row.ad_group.name,
+                    "criterion_id": str(
+                        row.ad_group_criterion.criterion_id
+                    ),
+                    "keyword": (
+                        row.ad_group_criterion.keyword.text
+                    ),
+                    "match_type": enum_name(
+                        row.ad_group_criterion
+                        .keyword.match_type
+                    ),
+                    "status": enum_name(
+                        row.ad_group_criterion.status
+                    ),
+                    "impressions": row.metrics.impressions,
+                    "clicks": row.metrics.clicks,
+                    "ctr": round(
+                        safe_float(row.metrics.ctr) * 100,
+                        2,
+                    ),
+                    "cost": round(cost, 2),
+                    "conversions": round(conversions, 2),
+                    "cpa": cpa,
+                }
+            )
 
         return data
 
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
+    except Exception as error:
+        return {"error": str(error)}
+
+
+# ============================================================
+# TERMES DE RECHERCHE
+# ============================================================
+
 @app.get("/search-terms")
 def search_terms():
-
-    config = {
-        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "use_proto_plus": True
-    }
-
     try:
-
-        client = GoogleAdsClient.load_from_dict(config)
-
-        ga_service = client.get_service("GoogleAdsService")
+        client = get_google_ads_client()
 
         query = """
             SELECT
+                campaign.id,
                 campaign.name,
+                ad_group.id,
                 ad_group.name,
                 search_term_view.search_term,
                 metrics.impressions,
                 metrics.clicks,
+                metrics.ctr,
                 metrics.cost_micros,
                 metrics.conversions
             FROM search_term_view
             WHERE segments.date DURING LAST_30_DAYS
         """
 
-        response = ga_service.search(
-            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-            query=query,
-        )
+        response = execute_query(client, query)
 
         data = []
 
         for row in response:
+            cost = row.metrics.cost_micros / 1_000_000
+            conversions = safe_float(row.metrics.conversions)
 
-            cost = row.metrics.cost_micros / 1000000
-            conversions = row.metrics.conversions
+            cpa = (
+                round(cost / conversions, 2)
+                if conversions > 0
+                else None
+            )
 
-            cpa = None
-
-            if conversions > 0:
-                cpa = round(cost / conversions, 2)
-
-            data.append({
-                "campaign": row.campaign.name,
-                "ad_group": row.ad_group.name,
-                "search_term": row.search_term_view.search_term,
-                "impressions": row.metrics.impressions,
-                "clicks": row.metrics.clicks,
-                "cost": round(cost, 2),
-                "conversions": round(conversions, 2),
-                "cpa": cpa
-            })
+            data.append(
+                {
+                    "campaign_id": str(row.campaign.id),
+                    "campaign": row.campaign.name,
+                    "ad_group_id": str(row.ad_group.id),
+                    "ad_group": row.ad_group.name,
+                    "search_term": (
+                        row.search_term_view.search_term
+                    ),
+                    "impressions": row.metrics.impressions,
+                    "clicks": row.metrics.clicks,
+                    "ctr": round(
+                        safe_float(row.metrics.ctr) * 100,
+                        2,
+                    ),
+                    "cost": round(cost, 2),
+                    "conversions": round(conversions, 2),
+                    "cpa": cpa,
+                }
+            )
 
         return data
 
-    except Exception as e:
-        return {
-            "error": str(e)
-        }
-@app.get("/negative-keyword-opportunities")
-def negative_keyword_opportunities():
+    except Exception as error:
+        return {"error": str(error)}
 
-    config = {
-        "client_id": os.getenv("GOOGLE_ADS_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_ADS_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_ADS_REFRESH_TOKEN"),
-        "login_customer_id": os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"),
-        "use_proto_plus": True
-    }
+
+# ============================================================
+# OPTIMIZATION OPPORTUNITIES
+# Analyse à la demande d'une campagne précise
+# AUCUNE modification automatique
+# ============================================================
+
+@app.get("/optimization-opportunities")
+def optimization_opportunities(
+    campaign_id: str = Query(
+        ...,
+        description="ID Google Ads de la campagne à analyser",
+    ),
+):
+    campaign_id = campaign_id.replace("-", "").strip()
 
     try:
+        client = get_google_ads_client()
 
-        client = GoogleAdsClient.load_from_dict(config)
+        opportunities: List[Dict[str, Any]] = []
+        audit_errors: List[Dict[str, str]] = []
+        audit_coverage: Dict[str, str] = {}
 
-        ga_service = client.get_service("GoogleAdsService")
+        campaign_summary: Dict[str, Any] = {
+            "campaign_id": campaign_id,
+            "period": "LAST_30_DAYS",
+        }
 
-        query = """
-            SELECT
-                campaign.name,
-                search_term_view.search_term,
-                metrics.clicks,
-                metrics.cost_micros,
-                metrics.conversions
-            FROM search_term_view
-            WHERE segments.date DURING LAST_30_DAYS
-        """
+        # ----------------------------------------------------
+        # 1. PERFORMANCE, CPA, ROAS, IMPRESSION SHARE, ENCHÈRES
+        # ----------------------------------------------------
 
-        response = ga_service.search(
-            customer_id=os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-            query=query,
-        )
+        try:
+            performance_query = f"""
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    campaign.status,
+                    campaign.advertising_channel_type,
+                    campaign.bidding_strategy_type,
+                    campaign_budget.amount_micros,
+                    campaign_budget.status,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.ctr,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value,
+                    metrics.search_impression_share,
+                    metrics.search_budget_lost_impression_share,
+                    metrics.search_rank_lost_impression_share
+                FROM campaign
+                WHERE campaign.id = {campaign_id}
+                  AND segments.date DURING LAST_30_DAYS
+            """
 
-        data = []
+            rows = execute_query(client, performance_query)
 
-        for row in response:
+            if not rows:
+                return {
+                    "error": (
+                        "Campagne introuvable ou sans données "
+                        "durant LAST_30_DAYS."
+                    ),
+                    "campaign_id": campaign_id,
+                }
 
-            cost = row.metrics.cost_micros / 1000000
+            row = rows[0]
+
+            cost = row.metrics.cost_micros / 1_000_000
+            conversions = safe_float(row.metrics.conversions)
+            conversion_value = safe_float(
+                row.metrics.conversions_value
+            )
+
+            cpa = (
+                round(cost / conversions, 2)
+                if conversions > 0
+                else None
+            )
+
+            roas = (
+                round(conversion_value / cost, 2)
+                if cost > 0
+                else None
+            )
+
+            ctr = round(
+                safe_float(row.metrics.ctr) * 100,
+                2,
+            )
+
+            impression_share = safe_float(
+                row.metrics.search_impression_share
+            )
+
+            lost_budget = safe_float(
+                row.metrics
+                .search_budget_lost_impression_share
+            )
+
+            lost_rank = safe_float(
+                row.metrics
+                .search_rank_lost_impression_share
+            )
+
+            daily_budget = (
+                row.campaign_budget.amount_micros
+                / 1_000_000
+            )
+
+            campaign_summary.update(
+                {
+                    "campaign_name": row.campaign.name,
+                    "status": enum_name(
+                        row.campaign.status
+                    ),
+                    "channel_type": enum_name(
+                        row.campaign
+                        .advertising_channel_type
+                    ),
+                    "bidding_strategy": enum_name(
+                        row.campaign
+                        .bidding_strategy_type
+                    ),
+                    "daily_budget": round(
+                        daily_budget,
+                        2,
+                    ),
+                    "impressions": row.metrics.impressions,
+                    "clicks": row.metrics.clicks,
+                    "ctr_percent": ctr,
+                    "cost": round(cost, 2),
+                    "conversions": round(
+                        conversions,
+                        2,
+                    ),
+                    "conversion_value": round(
+                        conversion_value,
+                        2,
+                    ),
+                    "cpa": cpa,
+                    "roas": roas,
+                    "search_impression_share_percent": (
+                        round(impression_share * 100, 2)
+                        if impression_share > 0
+                        else None
+                    ),
+                    "lost_budget_share_percent": (
+                        round(lost_budget * 100, 2)
+                        if lost_budget > 0
+                        else 0
+                    ),
+                    "lost_rank_share_percent": (
+                        round(lost_rank * 100, 2)
+                        if lost_rank > 0
+                        else 0
+                    ),
+                }
+            )
+
+            audit_coverage["campaign_performance"] = "SUCCESS"
+
+            non_smart_strategies = {
+                "MANUAL_CPC",
+                "MANUAL_CPM",
+                "MANUAL_CPV",
+                "COMMISSION",
+            }
+
+            bidding_strategy = enum_name(
+                row.campaign.bidding_strategy_type
+            )
 
             if (
-                row.metrics.clicks >= 5
-                and row.metrics.conversions == 0
-                and cost > 10
+                conversions >= 30
+                and bidding_strategy in non_smart_strategies
             ):
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "BIDDING_STRATEGY",
+                    "Volume suffisant pour évaluer une stratégie intelligente",
+                    (
+                        f"La campagne a généré "
+                        f"{round(conversions, 2)} conversions "
+                        f"durant les 30 derniers jours et utilise "
+                        f"{bidding_strategy}."
+                    ),
+                    (
+                        "Évaluer Maximiser les conversions ou CPA "
+                        "cible. Vérifier d'abord la qualité du suivi "
+                        "des conversions et la stabilité du CPA."
+                    ),
+                    {
+                        "conversions_30d": round(
+                            conversions,
+                            2,
+                        ),
+                        "current_strategy": bidding_strategy,
+                        "observed_cpa": cpa,
+                    },
+                )
 
-                data.append({
-                    "campaign": row.campaign.name,
-                    "search_term": row.search_term_view.search_term,
-                    "clicks": row.metrics.clicks,
-                    "cost": round(cost, 2),
-                    "conversions": row.metrics.conversions
-                })
+            if lost_budget >= 0.20:
+                if (
+                    conversions >= 10
+                    and roas is not None
+                    and roas >= 2
+                ):
+                    add_opportunity(
+                        opportunities,
+                        "HIGH",
+                        "IMPRESSION_SHARE_BUDGET",
+                        "Part d'impressions perdue à cause du budget",
+                        (
+                            f"La campagne perd environ "
+                            f"{round(lost_budget * 100, 2)} % "
+                            f"des impressions à cause du budget."
+                        ),
+                        (
+                            "La campagne produit des conversions et "
+                            "un ROAS positif. Évaluer une augmentation "
+                            "progressive du budget après validation."
+                        ),
+                        {
+                            "lost_budget_share_percent": round(
+                                lost_budget * 100,
+                                2,
+                            ),
+                            "conversions": round(
+                                conversions,
+                                2,
+                            ),
+                            "cpa": cpa,
+                            "roas": roas,
+                            "current_daily_budget": round(
+                                daily_budget,
+                                2,
+                            ),
+                        },
+                    )
+                else:
+                    add_opportunity(
+                        opportunities,
+                        "MEDIUM",
+                        "IMPRESSION_SHARE_BUDGET",
+                        "Part d'impressions perdue à cause du budget",
+                        (
+                            f"La campagne perd environ "
+                            f"{round(lost_budget * 100, 2)} % "
+                            f"des impressions à cause du budget."
+                        ),
+                        (
+                            "Ne pas augmenter automatiquement le "
+                            "budget. Examiner d'abord le CPA, le ROAS "
+                            "et la qualité des conversions."
+                        ),
+                        {
+                            "lost_budget_share_percent": round(
+                                lost_budget * 100,
+                                2,
+                            ),
+                            "conversions": round(
+                                conversions,
+                                2,
+                            ),
+                            "cpa": cpa,
+                            "roas": roas,
+                        },
+                    )
 
-        data.sort(
-            key=lambda x: x["cost"],
-            reverse=True
+            if lost_rank >= 0.20:
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "IMPRESSION_SHARE_RANK",
+                    "Part d'impressions perdue à cause du classement",
+                    (
+                        f"La campagne perd environ "
+                        f"{round(lost_rank * 100, 2)} % "
+                        f"des impressions à cause du classement."
+                    ),
+                    (
+                        "Analyser le Quality Score, la pertinence des "
+                        "annonces, le CTR attendu, l'expérience de "
+                        "page de destination et les enchères."
+                    ),
+                    {
+                        "lost_rank_share_percent": round(
+                            lost_rank * 100,
+                            2,
+                        ),
+                        "ctr_percent": ctr,
+                        "cpa": cpa,
+                    },
+                )
+
+        except Exception as error:
+            audit_coverage["campaign_performance"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "campaign_performance",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 2. QUALITY SCORE ET TYPES DE CORRESPONDANCE
+        # ----------------------------------------------------
+
+        try:
+            keyword_query = f"""
+                SELECT
+                    campaign.id,
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group_criterion.criterion_id,
+                    ad_group_criterion.keyword.text,
+                    ad_group_criterion.keyword.match_type,
+                    ad_group_criterion.quality_info.quality_score,
+                    ad_group_criterion.quality_info.creative_quality_score,
+                    ad_group_criterion.quality_info.post_click_quality_score,
+                    ad_group_criterion.quality_info.search_predicted_ctr,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions
+                FROM keyword_view
+                WHERE campaign.id = {campaign_id}
+                  AND segments.date DURING LAST_30_DAYS
+            """
+
+            keyword_rows = execute_query(
+                client,
+                keyword_query,
+            )
+
+            low_quality_keywords = []
+            broad_waste_keywords = []
+
+            for row in keyword_rows:
+                keyword = (
+                    row.ad_group_criterion.keyword.text
+                )
+
+                match_type = enum_name(
+                    row.ad_group_criterion
+                    .keyword.match_type
+                )
+
+                quality_score = (
+                    row.ad_group_criterion
+                    .quality_info.quality_score
+                )
+
+                ad_relevance = enum_name(
+                    row.ad_group_criterion
+                    .quality_info.creative_quality_score
+                )
+
+                landing_page = enum_name(
+                    row.ad_group_criterion
+                    .quality_info.post_click_quality_score
+                )
+
+                expected_ctr = enum_name(
+                    row.ad_group_criterion
+                    .quality_info.search_predicted_ctr
+                )
+
+                cost = (
+                    row.metrics.cost_micros
+                    / 1_000_000
+                )
+
+                conversions = safe_float(
+                    row.metrics.conversions
+                )
+
+                if quality_score > 0 and quality_score <= 5:
+                    low_quality_keywords.append(
+                        {
+                            "ad_group": row.ad_group.name,
+                            "keyword": keyword,
+                            "quality_score": quality_score,
+                            "ad_relevance": ad_relevance,
+                            "expected_ctr": expected_ctr,
+                            "landing_page_experience": (
+                                landing_page
+                            ),
+                            "impressions": (
+                                row.metrics.impressions
+                            ),
+                            "clicks": row.metrics.clicks,
+                            "cost": round(cost, 2),
+                            "conversions": round(
+                                conversions,
+                                2,
+                            ),
+                        }
+                    )
+
+                if (
+                    match_type == "BROAD"
+                    and row.metrics.clicks >= 5
+                    and conversions == 0
+                    and cost >= 10
+                ):
+                    broad_waste_keywords.append(
+                        {
+                            "ad_group": row.ad_group.name,
+                            "keyword": keyword,
+                            "match_type": match_type,
+                            "clicks": row.metrics.clicks,
+                            "cost": round(cost, 2),
+                            "conversions": 0,
+                        }
+                    )
+
+            low_quality_keywords.sort(
+                key=lambda item: (
+                    item["quality_score"],
+                    -item["cost"],
+                )
+            )
+
+            broad_waste_keywords.sort(
+                key=lambda item: item["cost"],
+                reverse=True,
+            )
+
+            if low_quality_keywords:
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "QUALITY_SCORE",
+                    "Mots-clés avec un faible Quality Score",
+                    (
+                        f"{len(low_quality_keywords)} mot(s)-clé(s) "
+                        f"ont un Quality Score de 5 ou moins."
+                    ),
+                    (
+                        "Vérifier séparément la pertinence de "
+                        "l'annonce, le CTR attendu et l'expérience "
+                        "sur la page de destination."
+                    ),
+                    {
+                        "keywords": low_quality_keywords[:25]
+                    },
+                )
+
+            if broad_waste_keywords:
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "MATCH_               "Requêtes larges avec dépense sans conversion",
+                    (
+                        f"{len(broad_waste_keywords)} mot(s)-clé(s) "
+                        f"en requête large ont au moins 5 clics, "
+                        f"10 $ de coût et aucune conversion."
+                    ),
+                    (
+                        "Examiner les termes de recherche. Évaluer "
+                        "Phrase Match, Exact Match ou des mots-clés "
+                        "négatifs. Ne pas changer automatiquement le "
+                        "type de correspondance."
+                    ),
+                    {
+                        "keywords": broad_waste_keywords[:25]
+                    },
+                )
+
+            audit_coverage["keyword_quality"] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage["keyword_quality"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "keyword_quality",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 3. ANNONCES RSA : 15 TITRES ET 4 DESCRIPTIONS
+        # ----------------------------------------------------
+
+        try:
+            rsa_query = f"""
+                SELECT
+                    campaign.id,
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group_ad.ad.id,
+                    ad_group_ad.status,
+                    ad_group_ad.ad.type,
+                    ad_group_ad.ad_strength,
+                    ad_group_ad.ad.responsive_search_ad.headlines,
+                    ad_group_ad.ad.responsive_search_ad.descriptions
+                FROM ad_group_ad
+                WHERE campaign.id = {campaign_id}
+                  AND ad_group_ad.status != 'REMOVED'
+                  AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
+            """
+
+            rsa_rows = execute_query(client, rsa_query)
+
+            incomplete_rsa = []
+
+            for row in rsa_rows:
+                headlines = list(
+                    row.ad_group_ad.ad
+                    .responsive_search_ad.headlines
+                )
+
+                descriptions = list(
+                    row.ad_group_ad.ad
+                    .responsive_search_ad.descriptions
+                )
+
+                headline_texts = [
+                    asset.text.strip().lower()
+                    for asset in headlines
+                    if asset.text
+                ]
+
+                description_texts = [
+                    asset.text.strip().lower()
+                    for asset in descriptions
+                    if asset.text
+                ]
+
+                duplicate_headlines = (
+                    len(headline_texts)
+                    - len(set(headline_texts))
+                )
+
+                duplicate_descriptions = (
+                    len(description_texts)
+                    - len(set(description_texts))
+                )
+
+                if (
+                    len(headlines) < 15
+                    or len(descriptions) < 4
+                    or duplicate_headlines > 0
+                    or duplicate_descriptions > 0
+                ):
+                    incomplete_rsa.append(
+                        {
+                            "ad_group": row.ad_group.name,
+                            "ad_id": str(
+                                row.ad_group_ad.ad.id
+                            ),
+                            "status": enum_name(
+                                row.ad_group_ad.status
+                            ),
+                            "ad_strength": enum_name(
+                                row.ad_group_ad.ad_strength
+                            ),
+                            "headlines_count": len(
+                                headlines
+                            ),
+                            "descriptions_count": len(
+                                descriptions
+                            ),
+                            "missing_headlines": max(
+                                0,
+                                15 - len(headlines),
+                            ),
+                            "missing_descriptions": max(
+                                0,
+                                4 - len(descriptions),
+                            ),
+                            "duplicate_headlines": (
+                                duplicate_headlines
+                            ),
+                            "duplicate_descriptions": (
+                                duplicate_descriptions
+                            ),
+                        }
+                    )
+
+            if not rsa_rows:
+                add_opportunity(
+                    opportunities,
+                    "INFO",
+                    "RSA",
+                    "Aucune RSA trouvée",
+                    (
+                        "Aucune annonce de recherche réactive "
+                        "admissible n'a été retournée pour cette "
+                        "campagne."
+                    ),
+                    (
+                        "Vérifier le type de campagne et la présence "
+                        "d'annonces Search actives."
+                    ),
+                )
+
+            elif incomplete_rsa:
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "RSA_COMPLETENESS",
+                    "Annonces RSA incomplètes",
+                    (
+                        f"{len(incomplete_rsa)} RSA nécessitent "
+                        f"une révision des titres, descriptions ou "
+                        f"contenus dupliqués."
+                    ),
+                    (
+                        "Évaluer l'utilisation de 15 titres et "
+                        "4 descriptions. Tester différents CTA, "
+                        "arguments de valeur et formulations. "
+                        "Ne publier aucun texte automatiquement."
+                    ),
+                    {
+                        "ads": incomplete_rsa[:25]
+                    },
+                )
+
+            audit_coverage["rsa"] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage["rsa"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "rsa",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 4. ASSETS DE CAMPAGNE
+        # ----------------------------------------------------
+
+        try:
+            asset_query = f"""
+                SELECT
+                    campaign.id,
+                    campaign_asset.field_type,
+                    campaign_asset.status
+                FROM campaign_asset
+                WHERE campaign.id = {campaign_id}
+                  AND campaign_asset.status != 'REMOVED'
+            """
+
+            asset_rows = execute_query(client, asset_query)
+
+            active_asset_types = sorted(
+                {
+                    enum_name(
+                        row.campaign_asset.field_type
+                    )
+                    for row in asset_rows
+                    if enum_name(
+                        row.campaign_asset.status
+                    ) == "ENABLED"
+                }
+            )
+
+            expected_assets = {
+                "SITELINK",
+                "CALLOUT",
+                "STRUCTURED_SNIPPET",
+                "IMAGE",
+            }
+
+            missing_assets = sorted(
+                expected_assets
+                - set(active_asset_types)
+            )
+
+            if missing_assets:
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "MISSING_ASSETS",
+                    "Composants publicitaires potentiellement manquants",
+                    (
+                        "Les types de composants suivants ne sont "
+                        "pas actifs au niveau campagne : "
+                        + ", ".join(missing_assets)
+                    ),
+                    (
+                        "Vérifier si ces composants sont applicables "
+                        "à la campagne et s'ils existent au niveau "
+                        "du compte ou du groupe d'annonces avant "
+                        "d'en créer de nouveaux."
+                    ),
+                    {
+                        "active_campaign_asset_types": (
+                            active_asset_types
+                        ),
+                        "missing_campaign_asset_types": (
+                            missing_assets
+                        ),
+                        "scope_checked": "CAMPAIGN",
+                    },
+                )
+
+            audit_coverage["campaign_assets"] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage["campaign_assets"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "campaign_assets",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 5. TERMES DE RECHERCHE SANS CONVERSION
+        # ----------------------------------------------------
+
+        try:
+            search_term_query = f"""
+                SELECT
+                    campaign.id,
+                    ad_group.name,
+                    search_term_view.search_term,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions
+                FROM search_term_view
+                WHERE campaign.id = {campaign_id}
+                  AND segments.date DURING LAST_30_DAYS
+            """
+
+            search_rows = execute_query(
+                client,
+                search_term_query,
+            )
+
+            wasted_terms = []
+
+            for row in search_rows:
+                cost = (
+                    row.metrics.cost_micros
+                    / 1_000_000
+                )
+
+                conversions = safe_float(
+                    row.metrics.conversions
+                )
+
+                if (
+                    row.metrics.clicks >= 5
+                    and cost >= 10
+                    and conversions == 0
+                ):
+                    wasted_terms.append(
+                        {
+                            "ad_group": row.ad_group.name,
+                            "search_term": (
+                                row.search_term_view
+                                .search_term
+                            ),
+                            "impressions": (
+                                row.metrics.impressions
+                            ),
+                            "clicks": row.metrics.clicks,
+                            "cost": round(cost, 2),
+                            "conversions": 0,
+                        }
+                    )
+
+            wasted_terms.sort(
+                key=lambda item: item["cost"],
+                reverse=True,
+            )
+
+            if wasted_terms:
+                total_wasted_cost = round(
+                    sum(
+                        item["cost"]
+                        for item in wasted_terms
+                    ),
+                    2,
+                )
+
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "SEARCH_TERMS",
+                    "Termes de recherche avec dépense sans conversion",
+                    (
+                        f"{len(wasted_terms)} terme(s) ont dépassé "
+                        f"le seuil de 5 clics et 10 $ sans conversion."
+                    ),
+                    (
+                        "Vérifier l'intention de chaque terme. "
+                        "Évaluer un mot-clé négatif seulement après "
+                        "validation humaine."
+                    ),
+                    {
+                        "estimated_wasted_cost": (
+                            total_wasted_cost
+                        ),
+                        "search_terms": wasted_terms[:50],
+                    },
+                )
+
+            audit_coverage["search_terms"] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage["search_terms"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "search_terms",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 6. PERFORMANCE PAR JOUR ET HEURE
+        # ----------------------------------------------------
+
+        try:
+            schedule_query = f"""
+                SELECT
+                    campaign.id,
+                    segments.day_of_week,
+                    segments.hour,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value
+                FROM campaign
+                WHERE campaign.id = {campaign_id}
+                  AND segments.date DURING LAST_30_DAYS
+            """
+
+            schedule_rows = execute_query(
+                client,
+                schedule_query,
+            )
+
+            weak_periods = []
+
+            for row in schedule_rows:
+                cost = (
+                    row.metrics.cost_micros
+                    / 1_000_000
+                )
+
+                conversions = safe_float(
+                    row.metrics.conversions
+                )
+
+                if (
+                    row.metrics.clicks >= 10
+                    and cost >= 25
+                    and conversions == 0
+                ):
+                    weak_periods.append(
+                        {
+                            "day": enum_name(
+                                row.segments.day_of_week
+                            ),
+                            "hour": row.segments.hour,
+                            "impressions": (
+                                row.metrics.impressions
+                            ),
+                            "clicks": row.metrics.clicks,
+                            "cost": round(cost, 2),
+                            "conversions": 0,
+                        }
+                    )
+
+            weak_periods.sort(
+                key=lambda item: item["cost"],
+                reverse=True,
+            )
+
+            if weak_periods:
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "SCHEDULE_PERFORMANCE",
+                    "Périodes avec dépense sans conversion",
+                    (
+                        f"{len(weak_periods)} combinaison(s) "
+                        f"jour/heure dépassent les seuils définis."
+                    ),
+                    (
+                        "Vérifier la répétition de cette tendance sur "
+                        "une période plus longue avant d'ajuster le "
+                        "calendrier de diffusion."
+                    ),
+                    {
+                        "periods": weak_periods[:30]
+                    },
+                )
+
+            audit_coverage["schedule"] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage["schedule"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "schedule",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 7. PERFORMANCE GÉOGRAPHIQUE
+        # ----------------------------------------------------
+
+        try:
+            geo_query = f"""
+                SELECT
+                    campaign.id,
+                    geographic_view.country_criterion_id,
+                    geographic_view.location_type,
+                    segments.geo_target_region,
+                    segments.geo_target_city,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value
+                FROM geographic_view
+                WHERE campaign.id = {campaign_id}
+                  AND segments.date DURING LAST_30_DAYS
+            """
+
+            geo_rows = execute_query(client, geo_query)
+
+            weak_locations = []
+
+            for row in geo_rows:
+                cost = (
+                    row.metrics.cost_micros
+                    / 1_000_000
+                )
+
+                conversions = safe_float(
+                    row.metrics.conversions
+                )
+
+                if (
+                    row.metrics.clicks >= 10
+                    and cost >= 50
+                    and conversions == 0
+                ):
+                    weak_locations.append(
+                        {
+                            "country_criterion_id": str(
+                                row.geographic_view
+                                .country_criterion_id
+                            ),
+                            "location_type": enum_name(
+                                row.geographic_view
+                                .location_type
+                            ),
+                            "region_resource": (
+                                row.segments
+                                .geo_target_region
+                            ),
+                            "city_resource": (
+                                row.segments
+                                .geo_target_city
+                            ),
+                            "impressions": (
+                                row.metrics.impressions
+                            ),
+                            "clicks": row.metrics.clicks,
+                            "cost": round(cost, 2),
+                            "conversions": 0,
+                        }
+                    )
+
+            weak_locations.sort(
+                key=lambda item: item["cost"],
+                reverse=True,
+            )
+
+            if weak_locations:
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "GEO_PERFORMANCE",
+                    "Zones géographiques avec dépense sans conversion",
+                    (
+                        f"{len(weak_locations)} zone(s) dépassent "
+                        f"les seuils minimums sans conversion."
+                    ),
+                    (
+                        "Identifier précisément les zones, vérifier "
+                        "leur importance commerciale et envisager une "
+                        "exclusion seulement après validation."
+                    ),
+                    {
+                        "locations": weak_locations[:30]
+                    },
+                )
+
+            audit_coverage["geography"] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage["geography"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "geography",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 8. AUDIENCES EN OBSERVATION
+        # ----------------------------------------------------
+
+        try:
+            audience_query = f"""
+                SELECT
+                    campaign.id,
+                    campaign_criterion.criterion_id,
+                    campaign_criterion.type,
+                    campaign_criterion.status,
+                    campaign_criterion.negative
+                FROM campaign_criterion
+                WHERE campaign.id = {campaign_id}
+                  AND campaign_criterion.status != 'REMOVED'
+            """
+
+            audience_rows = execute_query(
+                client,
+                audience_query,
+            )
+
+            audience_types = {
+                "USER_LIST",
+                "USER_INTEREST",
+                "CUSTOM_AUDIENCE",
+                "COMBINED_AUDIENCE",
+                "LIFE_EVENT",
+            }
+
+            detected_audiences = []
+
+            for row in audience_rows:
+                criterion_type = enum_name(
+                    row.campaign_criterion.type
+                )
+
+                if (
+                    criterion_type in audience_types
+                    and not row.campaign_criterion.negative
+                ):
+                    detected_audiences.append(
+                        {
+                            "criterion_id": str(
+                                row.campaign_criterion
+                                .criterion_id
+                            ),
+                            "type": criterion_type,
+                            "status": enum_name(
+                                row.campaign_criterion.status
+                            ),
+                        }
+                    )
+
+            if not detected_audiences:
+                add_opportunity(
+                    opportunities,
+                    "LOW",
+                    "AUDIENCE_OBSERVATION",
+                    "Aucun segment d'audience détecté au niveau campagne",
+                    (
+                        "L'audit n'a trouvé aucun segment d'audience "
+                        "positif au niveau de la campagne."
+                    ),
+                    (
+                        "Évaluer l'ajout de segments en mode "
+                        "Observation pour collecter des données sans "
+                        "restreindre la diffusion. Vérifier également "
+                        "les critères présents au niveau des groupes "
+                        "d'annonces."
+                    ),
+                    {
+                        "campaign_audiences_found": 0,
+                        "scope_checked": "CAMPAIGN",
+                    },
+                )
+
+            audit_coverage["audiences"] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage["audiences"] = "FAILED"
+            audit_errors.append(
+                {
+                    "audit": "audiences",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # CLASSEMENT FINAL
+        # ----------------------------------------------------
+
+        opportunities.sort(
+            key=lambda item: priority_order(
+                item["priority"]
+            )
         )
 
-        return data[:100]
+        priority_counts = {
+            "CRITICAL": 0,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "INFO": 0,
+        }
 
-    except Exception as e:
+        for opportunity in opportunities:
+            current_priority = opportunity["priority"]
+
+            if current_priority in priority_counts:
+                priority_counts[current_priority] += 1
+
         return {
-            "error": str(e)
+            "mode": "ON_DEMAND_ANALYSIS",
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+            "status": "RECOMMENDATION_ONLY",
+            "campaign": campaign_summary,
+            "summary": {
+                "opportunities_count": len(
+                    opportunities
+                ),
+                "priority_counts": priority_counts,
+                "audits_successful": sum(
+                    1
+                    for value in audit_coverage.values()
+                    if value == "SUCCESS"
+                ),
+                "audits_failed": len(audit_errors),
+            },
+            "opportunities": opportunities,
+            "audit_coverage": audit_coverage,
+            "audit_errors": audit_errors,
+            "disclaimer": (
+                "Cette analyse ne modifie aucune campagne. "
+                "Chaque recommandation doit être validée par "
+                "une personne qualifiée avant toute application."
+            ),
+        }
+
+    except Exception as error:
+        return {
+            "error": str(error),
+            "campaign_id": campaign_id,
+            "automatic_action": False,
         }
