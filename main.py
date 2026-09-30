@@ -244,8 +244,110 @@ def accounts():
         return {
             "error": str(error)
         }
+# ============================================================
+# ACCOUNT-SEARCH
+# ============================================================
+@app.get("/account-search")
+def account_search(
+    name: str
+):
+    try:
 
+        client = get_google_ads_client()
 
+        customer_service = client.get_service(
+            "CustomerService"
+        )
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        search_value = (
+            name.strip()
+            .lower()
+        )
+
+        results = []
+
+        accessible_customers = (
+            customer_service.list_accessible_customers()
+        )
+
+        for resource_name in (
+            accessible_customers.resource_names
+        ):
+
+            customer_id = (
+                resource_name.split("/")[-1]
+            )
+
+            query = """
+                SELECT
+                    customer.id,
+                    customer.descriptive_name,
+                    customer.currency_code,
+                    customer.time_zone,
+                    customer.manager
+                FROM customer
+            """
+
+            try:
+
+                response = (
+                    google_ads_service.search(
+                        customer_id=customer_id,
+                        query=query
+                    )
+                )
+
+                for row in response:
+
+                    account_name = (
+                        row.customer.descriptive_name
+                        or ""
+                    )
+
+                    if (
+                        search_value
+                        in account_name.lower()
+                    ):
+
+                        results.append(
+                            {
+                                "customer_id": str(
+                                    row.customer.id
+                                ),
+                                "account_name":
+                                    account_name,
+                                "currency":
+                                    row.customer.currency_code,
+                                "time_zone":
+                                    row.customer.time_zone,
+                                "is_manager":
+                                    row.customer.manager
+                            }
+                        )
+
+            except Exception:
+                pass
+
+        results.sort(
+            key=lambda x:
+            x["account_name"].lower()
+        )
+
+        return {
+            "search": name,
+            "matches_found": len(results),
+            "matches": results
+        }
+
+    except Exception as error:
+
+        return {
+            "error": str(error)
+        }
 # ============================================================
 # CAMPAGNES
 # ============================================================
