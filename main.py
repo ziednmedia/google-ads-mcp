@@ -72,7 +72,6 @@ def execute_query(
     )
 
     return list(response)
-``
 
 
 def safe_float(value: Any) -> float:
