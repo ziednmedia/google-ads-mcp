@@ -149,6 +149,90 @@ def config():
         ),
     }
 
+# ============================================================
+# ACCOUNTS
+# ============================================================
+
+@app.get("/accounts")
+def accounts():
+
+    try:
+
+        client = get_google_ads_client()
+
+        ga_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        customer_service = client.get_service(
+            "CustomerService"
+        )
+
+        accessible_customers = (
+            customer_service.list_accessible_customers()
+        )
+
+        accounts = []
+
+        for resource_name in (
+            accessible_customers.resource_names
+        ):
+
+            customer_id = (
+                resource_name.split("/")[-1]
+            )
+
+            query = """
+                SELECT
+                    customer.id,
+                    customer.descriptive_name,
+                    customer.currency_code,
+                    customer.time_zone,
+                    customer.manager
+                FROM customer
+            """
+
+            try:
+
+                response = ga_service.search(
+                    customer_id=customer_id,
+                    query=query
+                )
+
+                for row in response:
+
+                    accounts.append({
+                        "customer_id": str(
+                            row.customer.id
+                        ),
+                        "account_name":
+                            row.customer.descriptive_name,
+                        "currency":
+                            row.customer.currency_code,
+                        "time_zone":
+                            row.customer.time_zone,
+                        "is_manager":
+                            row.customer.manager
+                    })
+
+            except Exception:
+                pass
+
+        accounts.sort(
+            key=lambda x: x["account_name"]
+        )
+
+        return {
+            "total_accounts": len(accounts),
+            "accounts": accounts
+        }
+
+    except Exception as error:
+
+        return {
+            "error": str(error)
+        }
+
 
 # ============================================================
 # CAMPAGNES
