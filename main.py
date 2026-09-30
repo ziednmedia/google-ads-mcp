@@ -156,6 +156,95 @@ def config():
         ),
     }
 
+# ============================================================
+# ACCOUNTS
+# ============================================================
+
+@app.get("/accounts")
+def accounts():
+
+    try:
+
+        client = get_google_ads_client()
+
+        customer_service = client.get_service(
+            "CustomerService"
+        )
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        accessible_customers = (
+            customer_service.list_accessible_customers()
+        )
+
+        results = []
+
+        for resource_name in (
+            accessible_customers.resource_names
+        ):
+
+            customer_id = (
+                resource_name.split("/")[-1]
+            )
+
+            query = """
+                SELECT
+                    customer.id,
+                    customer.descriptive_name,
+                    customer.currency_code,
+                    customer.time_zone,
+                    customer.manager
+                FROM customer
+            """
+
+            try:
+
+                response = (
+                    google_ads_service.search(
+                        customer_id=customer_id,
+                        query=query
+                    )
+                )
+
+                for row in response:
+
+                    results.append(
+                        {
+                            "customer_id": str(
+                                row.customer.id
+                            ),
+                            "account_name":
+                                row.customer.descriptive_name,
+                            "currency":
+                                row.customer.currency_code,
+                            "time_zone":
+                                row.customer.time_zone,
+                            "is_manager":
+                                row.customer.manager
+                        }
+                    )
+
+            except Exception:
+                pass
+
+        results.sort(
+            key=lambda x:
+                x["account_name"].lower()
+        )
+
+        return {
+            "total_accounts": len(results),
+            "accounts": results
+        }
+
+    except Exception as error:
+
+        return {
+            "error": str(error)
+        }
+
 
 # ============================================================
 # CAMPAGNES
@@ -555,13 +644,20 @@ def optimization_opportunities(
 )
 
             if not rows:
-                return {
-                    "error": (
-                        "Campagne introuvable ou sans données "
-                        "durant LAST_30_DAYS."
-                    ),
-                    "campaign_id": campaign_id,
-                }
+
+                   return {
+
+                        "campaign_id": campaign_id,
+
+                        "status": "NO_RECENT_DATA",
+
+                        "message":
+                            "Aucune donnée durant LAST_30_DAYS.",
+
+                        "customer_id": customer_id,
+
+                        "automatic_action": False
+                    }
 
             row = rows[0]
 
