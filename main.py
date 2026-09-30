@@ -324,10 +324,14 @@ def top_campaigns(
 # ============================================================
 
 @app.get("/keywords")
-def keywords():
+def search_terms(
+customer_id: str
+):
     try:
         client = get_google_ads_client()
-
+customer_id = normalize_customer_id(
+customer_id
+)
         query = """
             SELECT
                 campaign.id,
@@ -347,7 +351,11 @@ def keywords():
             WHERE segments.date DURING LAST_30_DAYS
         """
 
-        response = execute_query(client, query)
+        response = execute_query(
+    client,
+    customer_id,
+    query
+)
 
         data = []
 
@@ -403,9 +411,14 @@ def keywords():
 # ============================================================
 
 @app.get("/search-terms")
-def search_terms():
+def search_terms(
+customer_id: str
+):
     try:
         client = get_google_ads_client()
+        customer_id = normalize_customer_id(
+customer_id
+)
 
         query = """
             SELECT
@@ -423,7 +436,11 @@ def search_terms():
             WHERE segments.date DURING LAST_30_DAYS
         """
 
-        response = execute_query(client, query)
+        response = execute_query(
+    client,
+    customer_id,
+    query
+)
 
         data = []
 
@@ -472,12 +489,18 @@ def search_terms():
 
 @app.get("/optimization-opportunities")
 def optimization_opportunities(
+
+    customer_id: str,
+
     campaign_id: str = Query(
         ...,
         description="ID Google Ads de la campagne à analyser",
     ),
 ):
     campaign_id = campaign_id.replace("-", "").strip()
+    customer_id = normalize_customer_id(
+customer_id
+)
 
     try:
         client = get_google_ads_client()
@@ -519,7 +542,11 @@ def optimization_opportunities(
                   AND segments.date DURING LAST_30_DAYS
             """
 
-            rows = execute_query(client, performance_query)
+            rows = execute_query(
+    client,
+    customer_id,
+    performance_query
+)
 
             if not rows:
                 return {
@@ -797,9 +824,10 @@ def optimization_opportunities(
             """
 
             keyword_rows = execute_query(
-                client,
-                keyword_query,
-            )
+    client,
+    customer_id,
+    keyword_query,
+)
 
             low_quality_keywords = []
             broad_waste_keywords = []
@@ -970,7 +998,11 @@ def optimization_opportunities(
                   AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
             """
 
-            rsa_rows = execute_query(client, rsa_query)
+            rsa_rows = execute_query(
+    client,
+    customer_id,
+    rsa_query
+)
 
             incomplete_rsa = []
 
@@ -1113,7 +1145,11 @@ def optimization_opportunities(
                   AND campaign_asset.status != 'REMOVED'
             """
 
-            asset_rows = execute_query(client, asset_query)
+            asset_rows = execute_query(
+    client,
+    customer_id,
+    asset_query
+)
 
             active_asset_types = sorted(
                 {
@@ -1198,9 +1234,10 @@ def optimization_opportunities(
             """
 
             search_rows = execute_query(
-                client,
-                search_term_query,
-            )
+    client,
+    customer_id,
+    search_term_query
+)
 
             wasted_terms = []
 
@@ -1303,9 +1340,10 @@ def optimization_opportunities(
             """
 
             schedule_rows = execute_query(
-                client,
-                schedule_query,
-            )
+    client,
+    customer_id,
+    schedule_query
+)
 
             weak_periods = []
 
@@ -1397,7 +1435,11 @@ def optimization_opportunities(
                   AND segments.date DURING LAST_30_DAYS
             """
 
-            geo_rows = execute_query(client, geo_query)
+            geo_rows = execute_query(
+    client,
+    customer_id,
+    geo_query
+)
 
             weak_locations = []
 
@@ -1497,9 +1539,10 @@ def optimization_opportunities(
             """
 
             audience_rows = execute_query(
-                client,
-                audience_query,
-            )
+    client,
+    customer_id,
+    audience_query
+)
 
             audience_types = {
                 "USER_LIST",
