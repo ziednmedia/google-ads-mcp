@@ -42,7 +42,7 @@ def get_google_ads_client() -> GoogleAdsClient:
     return GoogleAdsClient.load_from_dict(config)
 
 
-def validate_customer_id(
+def normalize_customer_id(
     customer_id: str
 ) -> str:
 
@@ -59,6 +59,7 @@ def validate_customer_id(
 
 def execute_query(
     client: GoogleAdsClient,
+    customer_id: str,
     query: str,
 ):
     google_ads_service = client.get_service(
@@ -66,11 +67,12 @@ def execute_query(
     )
 
     response = google_ads_service.search(
-customer_id=customer_id,
-query=query,
-)
+        customer_id=customer_id,
+        query=query,
+    )
 
     return list(response)
+``
 
 
 def safe_float(value: Any) -> float:
@@ -155,90 +157,6 @@ def config():
         ),
     }
 
-# ============================================================
-# ACCOUNTS
-# ============================================================
-
-@app.get("/accounts")
-def accounts():
-
-    try:
-
-        client = get_google_ads_client()
-
-        ga_service = client.get_service(
-            "GoogleAdsService"
-        )
-
-        customer_service = client.get_service(
-            "CustomerService"
-        )
-
-        accessible_customers = (
-            customer_service.list_accessible_customers()
-        )
-
-        accounts = []
-
-        for resource_name in (
-            accessible_customers.resource_names
-        ):
-
-            customer_id = (
-                resource_name.split("/")[-1]
-            )
-
-            query = """
-                SELECT
-                    customer.id,
-                    customer.descriptive_name,
-                    customer.currency_code,
-                    customer.time_zone,
-                    customer.manager
-                FROM customer
-            """
-
-            try:
-
-                response = ga_service.search(
-                    ,
-                    query=query
-                )
-
-                for row in response:
-
-                    accounts.append({
-                        "customer_id": str(
-                            row.customer.id
-                        ),
-                        "account_name":
-                            row.customer.descriptive_name,
-                        "currency":
-                            row.customer.currency_code,
-                        "time_zone":
-                            row.customer.time_zone,
-                        "is_manager":
-                            row.customer.manager
-                    })
-
-            except Exception:
-                pass
-
-        accounts.sort(
-            key=lambda x: x["account_name"]
-        )
-
-        return {
-            "total_accounts": len(accounts),
-            "accounts": accounts
-        }
-
-    except Exception as error:
-
-        return {
-            "error": str(error)
-        }
-
 
 # ============================================================
 # CAMPAGNES
@@ -246,11 +164,12 @@ def accounts():
 
 @app.get("/campaigns")
 def campaigns(
-customer_id: str
+    customer_id: str
 ):
+
     try:
         client = get_google_ads_client()
-        customer_id = validate_customer_id(
+        customer_id = normalize_customer_id(
 customer_id
 )
 
@@ -264,7 +183,11 @@ customer_id
             ORDER BY campaign.name
         """
 
-        response = execute_query(client, query)
+        response = execute_query(
+client,
+customer_id,
+query
+)
 
         data = []
 
@@ -291,14 +214,9 @@ customer_id
 # ============================================================
 
 @app.get("/campaign-performance")
-def campaign_performance(
-customer_id: str
-):
+def campaign_performance():
     try:
         client = get_google_ads_client()
-        customer_id = validate_customer_id(
-customer_id
-)
 
         query = """
             SELECT
@@ -398,14 +316,10 @@ def top_campaigns(
 # ============================================================
 
 @app.get("/keywords")
-def keywords(
-customer_id: str
-):
+def keywords():
     try:
         client = get_google_ads_client()
- customer_id = validate_customer_id(
-customer_id
-)
+
         query = """
             SELECT
                 campaign.id,
@@ -481,14 +395,10 @@ customer_id
 # ============================================================
 
 @app.get("/search-terms")
-def search_terms(
-customer_id: str
-):
+def search_terms():
     try:
         client = get_google_ads_client()
-customer_id = validate_customer_id(
-customer_id
-)
+
         query = """
             SELECT
                 campaign.id,
@@ -554,21 +464,16 @@ customer_id
 
 @app.get("/optimization-opportunities")
 def optimization_opportunities(
- 
-customer_id: str,
- 
-campaign_id: str = Query(
-...,
-description="ID Google Ads de la campagne"
-),
+    campaign_id: str = Query(
+        ...,
+        description="ID Google Ads de la campagne à analyser",
+    ),
 ):
     campaign_id = campaign_id.replace("-", "").strip()
 
     try:
         client = get_google_ads_client()
-customer_id = validate_customer_id(
-customer_id
-)
+
         opportunities: List[Dict[str, Any]] = []
         audit_errors: List[Dict[str, str]] = []
         audit_coverage: Dict[str, str] = {}
