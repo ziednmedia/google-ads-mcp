@@ -169,8 +169,8 @@ def campaigns(
     try:
         client = get_google_ads_client()
         customer_id = normalize_customer_id(
-customer_id
-)
+                customer_id
+        )
 
         query = """
             SELECT
@@ -219,8 +219,8 @@ customer_id: str
     try:
         client = get_google_ads_client()
         customer_id = normalize_customer_id(
-customer_id
-)
+                customer_id
+        )
 
         query = """
             SELECT
@@ -324,14 +324,16 @@ def top_campaigns(
 # ============================================================
 
 @app.get("/keywords")
-def search_terms(
+def keywords(
 customer_id: str
 ):
     try:
         client = get_google_ads_client()
-customer_id = normalize_customer_id(
-customer_id
-)
+
+        customer_id = normalize_customer_id(
+                customer_id
+        )
+
         query = """
             SELECT
                 campaign.id,
@@ -416,9 +418,11 @@ customer_id: str
 ):
     try:
         client = get_google_ads_client()
+
         customer_id = normalize_customer_id(
-customer_id
-)
+                customer_id
+        )
+        
 
         query = """
             SELECT
@@ -498,12 +502,14 @@ def optimization_opportunities(
     ),
 ):
     campaign_id = campaign_id.replace("-", "").strip()
-    customer_id = normalize_customer_id(
-customer_id
-)
+    
 
     try:
         client = get_google_ads_client()
+
+        customer_id = normalize_customer_id(
+                customer_id
+        )
 
         opportunities: List[Dict[str, Any]] = []
         audit_errors: List[Dict[str, str]] = []
