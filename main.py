@@ -213,9 +213,14 @@ query
 # ============================================================
 
 @app.get("/campaign-performance")
-def campaign_performance():
+def campaign_performance(
+customer_id: str
+):
     try:
         client = get_google_ads_client()
+        customer_id = normalize_customer_id(
+customer_id
+)
 
         query = """
             SELECT
@@ -232,7 +237,11 @@ def campaign_performance():
             WHERE segments.date DURING LAST_30_DAYS
         """
 
-        response = execute_query(client, query)
+        response = execute_query(
+client,
+customer_id,
+query
+)
 
         data = []
 
