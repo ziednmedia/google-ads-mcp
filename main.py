@@ -349,6 +349,86 @@ def account_search(
             "error": str(error)
         }
 # ============================================================
+# CAMPAGNES-SEARCH
+# ============================================================
+@app.get("/campaign-search")
+def campaign_search(
+    customer_id: str,
+    name: str
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        search_value = (
+            name.strip()
+            .lower()
+        )
+
+        client = get_google_ads_client()
+
+        query = """
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.advertising_channel_type
+            FROM campaign
+            ORDER BY campaign.name
+        """
+
+        response = execute_query(
+            client,
+            customer_id,
+            query
+        )
+
+        matches = []
+
+        for row in response:
+
+            campaign_name = (
+                row.campaign.name or ""
+            )
+
+            if (
+                search_value
+                in campaign_name.lower()
+            ):
+
+                matches.append(
+                    {
+                        "campaign_id": str(
+                            row.campaign.id
+                        ),
+                        "campaign_name":
+                            campaign_name,
+                        "status": enum_name(
+                            row.campaign.status
+                        ),
+                        "channel_type":
+                            enum_name(
+                                row.campaign
+                                .advertising_channel_type
+                            )
+                    }
+                )
+
+        return {
+            "customer_id": customer_id,
+            "search": name,
+            "matches_found": len(matches),
+            "matches": matches
+        }
+
+    except Exception as error:
+
+        return {
+            "error": str(error)
+        }
+# ============================================================
 # CAMPAGNES
 # ============================================================
 
