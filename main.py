@@ -2,8 +2,15 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Query
+from pydantic import BaseModel
 from google.ads.googleads.client import GoogleAdsClient
 
+class BudgetUpdateRequest(
+        BaseModel
+):
+        customer_id: str
+        campaign_id: str
+        new_budget: float
 
 app = FastAPI(
     title="Google Ads Optimization API",
