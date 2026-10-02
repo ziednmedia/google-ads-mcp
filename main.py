@@ -163,8 +163,103 @@ def config():
             os.getenv("GOOGLE_ADS_REFRESH_TOKEN")
         ),
     }
+ # ----------------------------------------------------
+ # BUDGET UPDATE
+ # ----------------------------------------------------
+ @app.post("/update-budget")
+ def update_budget(
+    request: BudgetUpdateRequest
+):
+    try:
 
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
 
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        campaign_budget_service = client.get_service(
+            "CampaignBudgetService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.campaign_budget,
+                campaign_budget.amount_micros
+            FROM campaign
+            WHERE campaign.id = {request.campaign_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "error": "Campaign not found"
+            }
+
+        current_budget = (
+            row.campaign_budget.amount_micros
+            / 1000000
+        )
+
+        budget_resource_name = (
+            row.campaign.campaign_budget
+        )
+
+        operation = client.get_type(
+            "CampaignBudgetOperation"
+        )
+
+        operation.update.resource_name = (
+            budget_resource_name
+        )
+
+        operation.update.amount_micros = int(
+            request.new_budget * 1000000
+        )
+
+        operation.update_mask.paths.append(
+            "amount_micros"
+        )
+
+        result = (
+            campaign_budget_service
+            .mutate_campaign_budgets(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_name":
+                row.campaign.name,
+            "old_budget":
+                current_budget,
+            "new_budget":
+                request.new_budget,
+            "resource_name":
+                result.results[0]
+                .resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
  # ----------------------------------------------------
  # PREVIEW BUDGET UPDATE
  # ----------------------------------------------------
