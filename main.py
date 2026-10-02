@@ -2018,14 +2018,14 @@ def optimization_opportunities(
             )
 
         # ----------------------------------------------------
-        # RÉPONSE JSON
+        # PREVIEW BUDGET UPDATE
         # ----------------------------------------------------
 
         @app.post("/preview-budget-update")
-                def preview_budget_update(
-            request: BudgetUpdateRequest
-                ):
-            try:
+def preview_budget_update(
+    request: BudgetUpdateRequest
+):
+    try:
 
         customer_id = normalize_customer_id(
             request.customer_id
@@ -2086,6 +2086,7 @@ def optimization_opportunities(
         return {
             "error": str(error)
         }
+
 
 
         # ----------------------------------------------------
