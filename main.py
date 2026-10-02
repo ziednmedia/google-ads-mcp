@@ -163,6 +163,75 @@ def config():
             os.getenv("GOOGLE_ADS_REFRESH_TOKEN")
         ),
     }
+ # ----------------------------------------------------
+ # PREVIEW BUDGET UPDATE
+ # ----------------------------------------------------
+
+@app.post("/preview-budget-update")
+def preview_budget_update(
+    request: BudgetUpdateRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign_budget.amount_micros
+            FROM campaign
+            WHERE campaign.id = {request.campaign_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "error": "Campaign not found"
+            }
+
+        current_budget = (
+            row.campaign_budget.amount_micros
+            / 1000000
+        )
+
+        return {
+            "campaign_id": str(
+                row.campaign.id
+            ),
+            "campaign_name":
+                row.campaign.name,
+            "current_budget":
+                round(current_budget, 2),
+            "new_budget":
+                request.new_budget,
+            "delta":
+                round(
+                    request.new_budget
+                    - current_budget,
+                    2
+                ),
+            "will_change": True
+        }
+
+    except Exception as error:
+        return {
+            "error": str(error)
+        }
 
 # ============================================================
 # ACCOUNTS
@@ -2017,75 +2086,6 @@ def optimization_opportunities(
                 )
             )
 
-        # ----------------------------------------------------
-        # PREVIEW BUDGET UPDATE
-        # ----------------------------------------------------
-
-        @app.post("/preview-budget-update")
-def preview_budget_update(
-    request: BudgetUpdateRequest
-):
-    try:
-
-        customer_id = normalize_customer_id(
-            request.customer_id
-        )
-
-        client = get_google_ads_client()
-
-        google_ads_service = client.get_service(
-            "GoogleAdsService"
-        )
-
-        query = f"""
-            SELECT
-                campaign.id,
-                campaign.name,
-                campaign_budget.amount_micros
-            FROM campaign
-            WHERE campaign.id = {request.campaign_id}
-        """
-
-        response = google_ads_service.search(
-            customer_id=customer_id,
-            query=query
-        )
-
-        row = next(iter(response), None)
-
-        if not row:
-            return {
-                "error": "Campaign not found"
-            }
-
-        current_budget = (
-            row.campaign_budget.amount_micros
-            / 1000000
-        )
-
-        return {
-            "campaign_id": str(
-                row.campaign.id
-            ),
-            "campaign_name":
-                row.campaign.name,
-            "current_budget":
-                round(current_budget, 2),
-            "new_budget":
-                request.new_budget,
-            "delta":
-                round(
-                    request.new_budget
-                    - current_budget,
-                    2
-                ),
-            "will_change": True
-        }
-
-    except Exception as error:
-        return {
-            "error": str(error)
-        }
 
 
 
@@ -2143,3 +2143,6 @@ def preview_budget_update(
             "campaign_id": campaign_id,
             "automatic_action": False,
         }
+
+            
+ 
