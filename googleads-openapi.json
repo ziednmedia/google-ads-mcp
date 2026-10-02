@@ -1,0 +1,101 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Google Ads MCP",
+    "description": "Google Ads Multi Account API",
+    "version": "1.0"
+  },
+  "host": "google-ads-mcp-165964728033.europe-west1.run.app",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/accounts": {
+      "get": {
+        "summary": "List Google Ads accounts",
+        "operationId": "Accounts",
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/account-search": {
+      "get": {
+        "summary": "Search account by name",
+        "operationId": "AccountSearch",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/campaign-search": {
+      "get": {
+        "summary": "Search campaigns",
+        "operationId": "CampaignSearch",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/optimization-opportunities": {
+      "get": {
+        "summary": "Analyze campaign",
+        "operationId": "OptimizationOpportunities",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "campaign_id",
+            "in": "query",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    }
+  }
+}
