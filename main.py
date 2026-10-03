@@ -20,6 +20,12 @@ class CampaignActionRequest(
     campaign_id: str
     confirmation_code: str
 
+class AdGroupActionRequest(BaseModel):
+    customer_id: str
+    campaign_id: str
+    ad_group_id: str
+    confirmation_code: str
+
 app = FastAPI(
     title="Google Ads Optimization API",
     version="1.0.0",
@@ -639,6 +645,98 @@ def account_search(
     except Exception as error:
 
         return {
+            "error": str(error)
+        }
+
+# ============================================================
+# AD-GROUPE-SEARCH
+# ============================================================
+@app.get("/ad-group-search")
+def ad_group_search(
+    customer_id: str,
+    campaign_id: str,
+    name: str
+):
+    try:
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        search_value = (
+            name.strip()
+            .lower()
+        )
+
+        client = get_google_ads_client()
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group.status,
+                ad_group.type
+            FROM ad_group
+            WHERE campaign.id = {campaign_id}
+            ORDER BY ad_group.name
+        """
+
+        response = execute_query(
+            client,
+            customer_id,
+            query
+        )
+
+        matches = []
+
+        for row in response:
+            ad_group_name = (
+                row.ad_group.name or ""
+            )
+
+            if search_value in ad_group_name.lower():
+                matches.append(
+                    {
+                        "customer_id": customer_id,
+                        "campaign_id": str(
+                            row.campaign.id
+                        ),
+                        "campaign_name": (
+                            row.campaign.name
+                        ),
+                        "ad_group_id": str(
+                            row.ad_group.id
+                        ),
+                        "ad_group_name": (
+                            ad_group_name
+                        ),
+                        "status": enum_name(
+                            row.ad_group.status
+                        ),
+                        "type": enum_name(
+                            row.ad_group.type
+                        )
+                    }
+                )
+
+        return {
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "search": name,
+            "matches_found": len(matches),
+            "matches": matches
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
             "error": str(error)
         }
 # ============================================================
