@@ -360,7 +360,7 @@ def pause_campaign(
             operations=[operation]
         )
 
-        return {
+            return {
             "status": "SUCCESS",
             "campaign_id":
                 str(row.campaign.id),
@@ -373,7 +373,7 @@ def pause_campaign(
                 .resource_name
         }
 
-    except Exception as error:
+       except Exception as error:
 
         return {
             "status": "FAILED",
