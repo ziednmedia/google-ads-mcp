@@ -332,7 +332,6 @@ def pause_campaign(
         row = next(iter(response), None)
 
         if not row:
-
             return {
                 "status": "FAILED",
                 "error":
@@ -359,7 +358,6 @@ def pause_campaign(
             customer_id=customer_id,
             operations=[operation]
         )
-
             return {
             "status": "SUCCESS",
             "campaign_id":
