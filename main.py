@@ -329,7 +329,6 @@ def pause_campaign(
         )
 
         row = next(iter(response), None)
-
         if not row:
         return {
                 "status": "FAILED",
