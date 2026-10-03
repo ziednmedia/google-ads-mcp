@@ -11,6 +11,7 @@ class BudgetUpdateRequest(
         customer_id: str
         campaign_id: str
         new_budget: float
+        confirmation_code: str
 
 app = FastAPI(
     title="Google Ads Optimization API",
@@ -178,6 +179,19 @@ def update_budget(
         customer_id = normalize_customer_id(
             request.customer_id
         )
+            
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+        return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
 
         client = get_google_ads_client()
 
