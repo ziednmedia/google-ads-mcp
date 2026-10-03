@@ -278,6 +278,108 @@ def update_budget(
             "error": str(error)
         }
  # ----------------------------------------------------
+ # PAUSE CAMPAGNE
+ # ----------------------------------------------------
+
+@app.post("/pause-campaign")
+def pause_campaign(
+    request: CampaignActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "error":
+                    "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        campaign_service = client.get_service(
+            "CampaignService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status
+            FROM campaign
+            WHERE campaign.id = {request.campaign_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+
+            return {
+                "status": "FAILED",
+                "error":
+                    "Campaign not found"
+            }
+
+        operation = client.get_type(
+            "CampaignOperation"
+        )
+
+        operation.update.resource_name = (
+            row.campaign.resource_name
+        )
+
+        operation.update.status = (
+            client.enums.CampaignStatusEnum.PAUSED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = campaign_service.mutate_campaigns(
+            customer_id=customer_id,
+            operations=[operation]
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_id":
+                str(row.campaign.id),
+            "campaign_name":
+                row.campaign.name,
+            "new_status":
+                "PAUSED",
+            "resource_name":
+                result.results[0]
+                .resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+ # ----------------------------------------------------
  # PREVIEW BUDGET UPDATE
  # ----------------------------------------------------
 
