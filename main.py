@@ -277,9 +277,9 @@ def update_budget(
             "status": "FAILED",
             "error": str(error)
         }
- # ----------------------------------------------------
- # PAUSE CAMPAGNE
- # ----------------------------------------------------
+# ----------------------------------------------------
+# PAUSE CAMPAGNE
+# ----------------------------------------------------
 @app.post("/pause-campaign")
 def pause_campaign(
     request: CampaignActionRequest
@@ -300,8 +300,7 @@ def pause_campaign(
         ):
             return {
                 "status": "FAILED",
-                "error":
-                    "Confirmation code invalid"
+                "error": "Confirmation code invalid"
             }
 
         client = get_google_ads_client()
@@ -329,14 +328,12 @@ def pause_campaign(
         )
 
         row = next(iter(response), None)
-            
+
         if not row:
-        
             return {
                 "status": "FAILED",
-                "error":
-                    "Campaign not found"
-        }
+                "error": "Campaign not found"
+            }
 
         operation = client.get_type(
             "CampaignOperation"
@@ -358,27 +355,26 @@ def pause_campaign(
             customer_id=customer_id,
             operations=[operation]
         )
+
         return {
             "status": "SUCCESS",
-            "campaign_id":
-                str(row.campaign.id),
-            "campaign_name":
-                row.campaign.name,
-            "new_status":
-                "PAUSED",
-            "resource_name":
-                result.results[0]
-                .resource_name
+            "campaign_id": str(row.campaign.id),
+            "campaign_name": row.campaign.name,
+            "new_status": "PAUSED",
+            "resource_name": (
+                result.results[0].resource_name
+            )
         }
-        except Exception as error:
-                
-            return {
-                "status": "FAILED",
-                "error": str(error)
-            }
- # ----------------------------------------------------
- # PREVIEW BUDGET UPDATE
- # ----------------------------------------------------
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+# ----------------------------------------------------
+# PREVIEW BUDGET UPDATE
+# ----------------------------------------------------
 
 @app.post("/preview-budget-update")
 def preview_budget_update(
