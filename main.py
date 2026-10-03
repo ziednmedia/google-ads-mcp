@@ -329,8 +329,10 @@ def pause_campaign(
         )
 
         row = next(iter(response), None)
+            
         if not row:
-        return {
+        
+            return {
                 "status": "FAILED",
                 "error":
                     "Campaign not found"
@@ -369,10 +371,11 @@ def pause_campaign(
                 .resource_name
         }
         except Exception as error:
-        return {
-            "status": "FAILED",
-            "error": str(error)
-        }
+                
+            return {
+                "status": "FAILED",
+                "error": str(error)
+            }
  # ----------------------------------------------------
  # PREVIEW BUDGET UPDATE
  # ----------------------------------------------------
