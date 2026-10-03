@@ -290,6 +290,339 @@ def update_budget(
             "status": "FAILED",
             "error": str(error)
         }
+
+# ----------------------------------------------------
+# PAUSE AD GROUPE
+# ----------------------------------------------------
+@app.post("/pause-ad-group")
+def pause_ad_group(
+    request: AdGroupActionRequest
+):
+    try:
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if not expected_code:
+            return {
+                "status": "FAILED",
+                "error": (
+                    "CONFIRMATION_CODE is not configured"
+                )
+            }
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "error": (
+                    "Confirmation code invalid"
+                )
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = (
+            client.get_service(
+                "GoogleAdsService"
+            )
+        )
+
+        ad_group_service = client.get_service(
+            "AdGroupService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group.status,
+                ad_group.resource_name
+            FROM ad_group
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error": (
+                    "Ad group not found in this campaign"
+                )
+            }
+
+        previous_status = enum_name(
+            row.ad_group.status
+        )
+
+        if previous_status == "PAUSED":
+            return {
+                "status": "NO_CHANGE",
+                "campaign_id": campaign_id,
+                "ad_group_id": ad_group_id,
+                "ad_group_name": (
+                    row.ad_group.name
+                ),
+                "previous_status": (
+                    previous_status
+                ),
+                "new_status": "PAUSED",
+                "message": (
+                    "Ad group is already paused"
+                )
+            }
+
+        operation = client.get_type(
+            "AdGroupOperation"
+        )
+
+        operation.update.resource_name = (
+            row.ad_group.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AdGroupStatusEnum
+            .PAUSED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            ad_group_service
+            .mutate_ad_groups(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_id": campaign_id,
+            "campaign_name": (
+                row.campaign.name
+            ),
+            "ad_group_id": ad_group_id,
+            "ad_group_name": (
+                row.ad_group.name
+            ),
+            "previous_status": previous_status,
+            "new_status": "PAUSED",
+            "resource_name": (
+                result.results[0]
+                .resource_name
+            )
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+
+# ----------------------------------------------------
+# ENABLE AD GROUPE
+# ----------------------------------------------------
+@app.post("/enable-ad-group")
+def enable_ad_group(
+    request: AdGroupActionRequest
+):
+    try:
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if not expected_code:
+            return {
+                "status": "FAILED",
+                "error": (
+                    "CONFIRMATION_CODE is not configured"
+                )
+            }
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "error": (
+                    "Confirmation code invalid"
+                )
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = (
+            client.get_service(
+                "GoogleAdsService"
+            )
+        )
+
+        ad_group_service = client.get_service(
+            "AdGroupService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                ad_group.id,
+                ad_group.name,
+                ad_group.status,
+                ad_group.resource_name
+            FROM ad_group
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error": (
+                    "Ad group not found in this campaign"
+                )
+            }
+
+        campaign_status = enum_name(
+            row.campaign.status
+        )
+
+        previous_status = enum_name(
+            row.ad_group.status
+        )
+
+        if campaign_status != "ENABLED":
+            return {
+                "status": "FAILED",
+                "error": (
+                    "The parent campaign must be "
+                    "enabled before enabling this "
+                    "ad group"
+                ),
+                "campaign_status": (
+                    campaign_status
+                )
+            }
+
+        if previous_status == "ENABLED":
+            return {
+                "status": "NO_CHANGE",
+                "ad_group_id": ad_group_id,
+                "ad_group_name": (
+                    row.ad_group.name
+                ),
+                "previous_status": (
+                    previous_status
+                ),
+                "new_status": "ENABLED",
+                "message": (
+                    "Ad group is already enabled"
+                )
+            }
+
+        operation = client.get_type(
+            "AdGroupOperation"
+        )
+
+        operation.update.resource_name = (
+            row.ad_group.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AdGroupStatusEnum
+            .ENABLED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            ad_group_service
+            .mutate_ad_groups(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_id": campaign_id,
+            "campaign_name": (
+                row.campaign.name
+            ),
+            "ad_group_id": ad_group_id,
+            "ad_group_name": (
+                row.ad_group.name
+            ),
+            "previous_status": previous_status,
+            "new_status": "ENABLED",
+            "resource_name": (
+                result.results[0]
+                .resource_name
+            )
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
 # ----------------------------------------------------
 # PAUSE CAMPAGNE
 # ----------------------------------------------------
