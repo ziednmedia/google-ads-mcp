@@ -290,7 +290,88 @@ def update_budget(
             "status": "FAILED",
             "error": str(error)
         }
+# ----------------------------------------------------
+# AD GROUPE
+# ----------------------------------------------------
+@app.get("/ad-groups")
+def ad_groups(
+    customer_id: str,
+    campaign_id: str
+):
+    try:
 
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        client = get_google_ads_client()
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group.status,
+                ad_group.type
+            FROM ad_group
+            WHERE campaign.id = {campaign_id}
+            ORDER BY ad_group.name
+        """
+
+        response = execute_query(
+            client,
+            customer_id,
+            query
+        )
+
+        results = []
+
+        campaign_name = ""
+
+        for row in response:
+
+            campaign_name = (
+                row.campaign.name
+            )
+
+            results.append(
+                {
+                    "ad_group_id": str(
+                        row.ad_group.id
+                    ),
+                    "ad_group_name":
+                        row.ad_group.name,
+                    "status":
+                        enum_name(
+                            row.ad_group.status
+                        ),
+                    "type":
+                        enum_name(
+                            row.ad_group.type
+                        )
+                }
+            )
+
+        return {
+            "customer_id":
+                customer_id,
+            "campaign_id":
+                campaign_id,
+            "campaign_name":
+                campaign_name,
+            "total_ad_groups":
+                len(results),
+            "ad_groups":
+                results
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
 # ----------------------------------------------------
 # PAUSE AD GROUPE
 # ----------------------------------------------------
