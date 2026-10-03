@@ -280,7 +280,6 @@ def update_budget(
  # ----------------------------------------------------
  # PAUSE CAMPAGNE
  # ----------------------------------------------------
-
 @app.post("/pause-campaign")
 def pause_campaign(
     request: CampaignActionRequest
@@ -332,11 +331,11 @@ def pause_campaign(
         row = next(iter(response), None)
 
         if not row:
-            return {
+        return {
                 "status": "FAILED",
                 "error":
                     "Campaign not found"
-            }
+        }
 
         operation = client.get_type(
             "CampaignOperation"
@@ -358,7 +357,7 @@ def pause_campaign(
             customer_id=customer_id,
             operations=[operation]
         )
-            return {
+        return {
             "status": "SUCCESS",
             "campaign_id":
                 str(row.campaign.id),
@@ -370,9 +369,7 @@ def pause_campaign(
                 result.results[0]
                 .resource_name
         }
-
-       except Exception as error:
-
+        except Exception as error:
         return {
             "status": "FAILED",
             "error": str(error)
