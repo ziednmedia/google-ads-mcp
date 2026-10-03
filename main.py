@@ -188,7 +188,7 @@ def update_budget(
             request.confirmation_code
             != expected_code
         ):
-        return {
+            return {
                 "status": "FAILED",
                 "error": "Confirmation code invalid"
             }
