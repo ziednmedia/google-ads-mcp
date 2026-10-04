@@ -2098,7 +2098,57 @@ def search_terms(
                             2
                         ),
 
-      
+                    "conversions":
+                        round(
+                            conversions,
+                            2
+                        ),
+
+                    "conversion_value":
+                        round(
+                            conversion_value,
+                            2
+                        ),
+
+                    "cpa":
+                        round(
+                            cpa,
+                            2
+                        )
+                        if cpa
+                        else None,
+
+                    "roas":
+                        round(
+                            roas,
+                            2
+                        )
+                        if roas
+                        else None
+                }
+            )
+
+        return {
+
+            "customer_id":
+                customer_id,
+
+            "campaign_id":
+                campaign_id,
+
+            "search_terms_count":
+                len(results),
+
+            "search_terms":
+                results
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
 # ============================================================
 # TERMES DE RECHERCHE
 # ============================================================
