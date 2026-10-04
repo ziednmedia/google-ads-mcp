@@ -2362,8 +2362,9 @@ def search_terms(
             "error": str(error),
         }
 # ============================================================
-# SEARCH TERM OPPORTUNITIES
+# SEARCH TERM OPPORTUNITIES V2
 # Analyse en lecture seule des termes de recherche
+# Prend en compte le statut Ajouté / Exclu
 # AUCUNE modification automatique
 # ============================================================
 
@@ -2421,7 +2422,7 @@ def search_term_opportunities(
         le=10.0,
         description=(
             "Multiplicateur du CPA moyen utilisé "
-            "pour détecter un CPA trop élevé."
+            "pour détecter un CPA élevé."
         ),
     ),
 ):
@@ -2468,6 +2469,7 @@ def search_term_opportunities(
                 ad_group.id,
                 ad_group.name,
                 search_term_view.search_term,
+                search_term_view.status,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.ctr,
@@ -2499,6 +2501,10 @@ def search_term_opportunities(
         for row in response:
             campaign_name = (
                 row.campaign.name
+            )
+
+            targeting_status = enum_name(
+                row.search_term_view.status
             )
 
             cost = (
@@ -2556,6 +2562,26 @@ def search_term_opportunities(
                 row.metrics.impressions
             )
 
+            is_already_added = (
+                targeting_status
+                in {
+                    "ADDED",
+                    "ADDED_EXCLUDED",
+                }
+            )
+
+            is_already_excluded = (
+                targeting_status
+                in {
+                    "EXCLUDED",
+                    "ADDED_EXCLUDED",
+                }
+            )
+
+            is_available_for_action = (
+                targeting_status == "NONE"
+            )
+
             search_terms.append(
                 {
                     "campaign_id": str(
@@ -2573,6 +2599,18 @@ def search_term_opportunities(
                     "search_term": (
                         row.search_term_view
                         .search_term
+                    ),
+                    "targeting_status": (
+                        targeting_status
+                    ),
+                    "is_already_added": (
+                        is_already_added
+                    ),
+                    "is_already_excluded": (
+                        is_already_excluded
+                    ),
+                    "is_available_for_action": (
+                        is_available_for_action
                     ),
                     "impressions": (
                         row.metrics.impressions
@@ -2663,42 +2701,94 @@ def search_term_opportunities(
         )
 
         # ----------------------------------------------------
-        # CATÉGORIE 1 :
-        # DÉPENSE SANS CONVERSION
+        # TERMES DÉJÀ AJOUTÉS
         # ----------------------------------------------------
 
-        wasted_spend_terms = []
+        already_added_keywords = [
+            {
+                **item,
+                "opportunity_type": (
+                    "EXISTING_KEYWORD"
+                ),
+                "recommendation": (
+                    "Ce terme est déjà ajouté comme "
+                    "mot-clé. Ne pas proposer un nouvel "
+                    "ajout. Évaluer uniquement sa "
+                    "performance actuelle."
+                ),
+            }
+            for item in search_terms
+            if item["is_already_added"]
+        ]
 
-        for item in search_terms:
-            if (
-                item["clicks"] >= minimum_clicks
-                and item["cost"] >= minimum_cost
-                and item["conversions"] == 0
-            ):
-                wasted_spend_terms.append(
-                    {
-                        **item,
-                        "priority": "HIGH",
-                        "opportunity_type": (
-                            "WASTED_SPEND"
-                        ),
-                        "recommendation": (
-                            "Vérifier l'intention de "
-                            "recherche. Évaluer ce terme "
-                            "comme mot-clé négatif seulement "
-                            "après validation humaine."
-                        ),
-                    }
-                )
-
-        wasted_spend_terms.sort(
+        already_added_keywords.sort(
             key=lambda item: item["cost"],
             reverse=True,
         )
 
         # ----------------------------------------------------
-        # CATÉGORIE 2 :
-        # CPA ÉLEVÉ PAR RAPPORT À LA CAMPAGNE
+        # TERMES DÉJÀ EXCLUS
+        # ----------------------------------------------------
+
+        already_excluded_terms = [
+            {
+                **item,
+                "opportunity_type": (
+                    "EXISTING_NEGATIVE_KEYWORD"
+                ),
+                "recommendation": (
+                    "Ce terme est déjà exclu. "
+                    "Ne pas proposer une nouvelle exclusion."
+                ),
+            }
+            for item in search_terms
+            if item["is_already_excluded"]
+        ]
+
+        already_excluded_terms.sort(
+            key=lambda item: item["cost"],
+            reverse=True,
+        )
+
+        # ----------------------------------------------------
+        # DÉPENSE SANS CONVERSION
+        # Seulement si le terme n'est ni ajouté ni exclu
+        # ----------------------------------------------------
+
+        negative_keyword_candidates = []
+
+        for item in search_terms:
+            if (
+                item["is_available_for_action"]
+                and item["clicks"] >= minimum_clicks
+                and item["cost"] >= minimum_cost
+                and item["conversions"] == 0
+            ):
+                negative_keyword_candidates.append(
+                    {
+                        **item,
+                        "priority": "HIGH",
+                        "opportunity_type": (
+                            "NEGATIVE_KEYWORD_CANDIDATE"
+                        ),
+                        "recommendation": (
+                            "Vérifier l'intention de recherche "
+                            "et la valeur commerciale. Évaluer "
+                            "l'ajout comme mot-clé négatif après "
+                            "validation humaine."
+                        ),
+                    }
+                )
+
+        negative_keyword_candidates.sort(
+            key=lambda item: item["cost"],
+            reverse=True,
+        )
+
+        # ----------------------------------------------------
+        # CPA ÉLEVÉ
+        # Tous les statuts sont conservés pour analyse,
+        # mais la recommandation dépend du statut existant
         # ----------------------------------------------------
 
         high_cpa_terms = []
@@ -2716,6 +2806,29 @@ def search_term_opportunities(
                     and item["cpa"]
                     > high_cpa_threshold
                 ):
+                    if item["is_already_excluded"]:
+                        recommendation = (
+                            "Ce terme est déjà exclu. "
+                            "Aucune nouvelle exclusion "
+                            "n'est nécessaire."
+                        )
+
+                    elif item["is_already_added"]:
+                        recommendation = (
+                            "Ce terme est déjà ajouté comme "
+                            "mot-clé. Vérifier son type de "
+                            "correspondance, son enchère, "
+                            "l'annonce et la page de destination."
+                        )
+
+                    else:
+                        recommendation = (
+                            "Analyser l'intention, le mot-clé "
+                            "déclencheur, l'annonce et la page "
+                            "de destination. Ne pas exclure "
+                            "automatiquement."
+                        )
+
                     high_cpa_terms.append(
                         {
                             **item,
@@ -2736,10 +2849,7 @@ def search_term_opportunities(
                                 )
                             ),
                             "recommendation": (
-                                "Comparer l'intention, le "
-                                "mot-clé déclencheur, l'annonce "
-                                "et la page de destination. "
-                                "Ne pas exclure automatiquement."
+                                recommendation
                             ),
                         }
                     )
@@ -2750,27 +2860,27 @@ def search_term_opportunities(
             )
 
         # ----------------------------------------------------
-        # CATÉGORIE 3 :
-        # TERMES PERFORMANTS
+        # TERMES PERFORMANTS DÉJÀ AJOUTÉS
         # ----------------------------------------------------
 
-        strong_terms = []
+        strong_existing_keywords = []
 
         if campaign_average_cpa is not None:
             for item in search_terms:
                 if (
-                    item["clicks"] >= minimum_clicks
+                    item["is_already_added"]
+                    and item["clicks"] >= minimum_clicks
                     and item["conversions"] > 0
                     and item["cpa"] is not None
                     and item["cpa"]
                     <= campaign_average_cpa
                 ):
-                    strong_terms.append(
+                    strong_existing_keywords.append(
                         {
                             **item,
                             "priority": "INFO",
                             "opportunity_type": (
-                                "STRONG_SEARCH_TERM"
+                                "STRONG_EXISTING_KEYWORD"
                             ),
                             "campaign_average_cpa": (
                                 round(
@@ -2779,15 +2889,15 @@ def search_term_opportunities(
                                 )
                             ),
                             "recommendation": (
-                                "Vérifier si ce terme existe "
-                                "déjà comme mot-clé. Sinon, "
-                                "évaluer son ajout en expression "
-                                "ou en mot-clé exact."
+                                "Terme déjà ajouté comme mot-clé "
+                                "et performant. Continuer la "
+                                "surveillance. Ne pas créer de "
+                                "mot-clé en double."
                             ),
                         }
                     )
 
-            strong_terms.sort(
+            strong_existing_keywords.sort(
                 key=lambda item: (
                     item["conversions"],
                     -item["cpa"],
@@ -2796,26 +2906,72 @@ def search_term_opportunities(
             )
 
         # ----------------------------------------------------
-        # SYNTHÈSE EXÉCUTIVE
+        # NOUVELLES OPPORTUNITÉS DE MOTS-CLÉS
+        # Seulement si statut NONE
         # ----------------------------------------------------
+
+        new_keyword_opportunities = []
+
+        if campaign_average_cpa is not None:
+            for item in search_terms:
+                if (
+                    item["is_available_for_action"]
+                    and item["clicks"] >= minimum_clicks
+                    and item["conversions"] > 0
+                    and item["cpa"] is not None
+                    and item["cpa"]
+                    <= campaign_average_cpa
+                ):
+                    new_keyword_opportunities.append(
+                        {
+                            **item,
+                            "priority": "MEDIUM",
+                            "opportunity_type": (
+                                "NEW_KEYWORD_OPPORTUNITY"
+                            ),
+                            "campaign_average_cpa": (
+                                round(
+                                    campaign_average_cpa,
+                                    2
+                                )
+                            ),
+                            "recommendation": (
+                                "Ce terme n'est ni ajouté ni "
+                                "exclu et sa performance est "
+                                "supérieure ou égale à la moyenne. "
+                                "Évaluer son ajout en mot-clé exact "
+                                "ou expression après validation."
+                            ),
+                        }
+                    )
+
+            new_keyword_opportunities.sort(
+                key=lambda item: (
+                    item["conversions"],
+                    -item["cpa"],
+                ),
+                reverse=True,
+            )
 
         estimated_wasted_cost = round(
             sum(
                 item["cost"]
-                for item in wasted_spend_terms
+                for item
+                in negative_keyword_candidates
             ),
             2,
         )
 
         total_opportunities = (
-            len(wasted_spend_terms)
+            len(negative_keyword_candidates)
             + len(high_cpa_terms)
-            + len(strong_terms)
+            + len(new_keyword_opportunities)
         )
 
         main_risk = (
             "Aucun gaspillage important détecté "
-            "selon les seuils actuels."
+            "parmi les termes non ajoutés et "
+            "non exclus."
         )
 
         recommended_first_action = (
@@ -2825,23 +2981,23 @@ def search_term_opportunities(
 
         estimated_priority = "LOW"
 
-        if wasted_spend_terms:
-            top_wasted_term = (
-                wasted_spend_terms[0]
+        if negative_keyword_candidates:
+            top_candidate = (
+                negative_keyword_candidates[0]
             )
 
             main_risk = (
                 f"Le terme "
-                f"'{top_wasted_term['search_term']}' "
-                f"a coûté "
-                f"{top_wasted_term['cost']} "
-                f"sans conversion."
+                f"'{top_candidate['search_term']}' "
+                f"a coûté {top_candidate['cost']} "
+                f"sans conversion et n'est pas "
+                f"déjà exclu."
             )
 
             recommended_first_action = (
                 "Vérifier l'intention de ce terme "
-                "et évaluer un mot-clé négatif "
-                "après validation humaine."
+                "et évaluer son ajout comme mot-clé "
+                "négatif après validation humaine."
             )
 
             estimated_priority = "HIGH"
@@ -2861,8 +3017,9 @@ def search_term_opportunities(
             )
 
             recommended_first_action = (
-                "Analyser le mot-clé déclencheur, "
-                "l'annonce et la page de destination."
+                top_high_cpa_term[
+                    "recommendation"
+                ]
             )
 
             estimated_priority = "MEDIUM"
@@ -2940,6 +3097,21 @@ def search_term_opportunities(
                     else None
                 ),
             },
+            "targeting_status_counts": {
+                "already_added": len(
+                    already_added_keywords
+                ),
+                "already_excluded": len(
+                    already_excluded_terms
+                ),
+                "available_for_action": sum(
+                    1
+                    for item in search_terms
+                    if item[
+                        "is_available_for_action"
+                    ]
+                ),
+            },
             "executive_summary": {
                 "main_risk": main_risk,
                 "recommended_first_action": (
@@ -2956,31 +3128,49 @@ def search_term_opportunities(
                 "total": (
                     total_opportunities
                 ),
-                "wasted_spend": len(
-                    wasted_spend_terms
+                "negative_keyword_candidates": (
+                    len(
+                        negative_keyword_candidates
+                    )
                 ),
                 "high_cpa": len(
                     high_cpa_terms
                 ),
-                "strong_terms": len(
-                    strong_terms
+                "new_keyword_opportunities": (
+                    len(
+                        new_keyword_opportunities
+                    )
+                ),
+                "strong_existing_keywords": (
+                    len(
+                        strong_existing_keywords
+                    )
                 ),
             },
             "negative_keyword_candidates": (
-                wasted_spend_terms[:50]
+                negative_keyword_candidates[:50]
+            ),
+            "new_keyword_opportunities": (
+                new_keyword_opportunities[:50]
+            ),
+            "strong_existing_keywords": (
+                strong_existing_keywords[:50]
             ),
             "high_cpa_terms": (
                 high_cpa_terms[:50]
             ),
-            "strong_search_terms": (
-                strong_terms[:50]
+            "already_added_keywords": (
+                already_added_keywords[:100]
+            ),
+            "already_excluded_terms": (
+                already_excluded_terms[:100]
             ),
             "disclaimer": (
-                "Les candidats négatifs sont des "
-                "recommandations basées sur les seuils "
-                "sélectionnés. Vérifier l'intention, "
-                "la valeur commerciale et le contexte "
-                "avant toute exclusion."
+                "Les opportunités sont fondées sur "
+                "les métriques et le statut de ciblage "
+                "retournés par Google Ads. Vérifier "
+                "l'intention, la valeur commerciale et "
+                "le contexte avant toute modification."
             ),
         }
 
