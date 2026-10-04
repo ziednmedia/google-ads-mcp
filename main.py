@@ -2017,6 +2017,315 @@ def optimization_opportunities(
                 }
             )
 
+
+        # ----------------------------------------------------
+        # ANALYSE COMPARATIVE DES GROUPES D'ANNONCES
+        # ----------------------------------------------------
+
+        try:
+            ad_group_query = f"""
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group.status,
+                    ad_group.type,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.ctr,
+                    metrics.average_cpc,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value,
+                    metrics.conversions_from_interactions_rate
+                FROM ad_group
+                WHERE campaign.id = {campaign_id}
+                  AND segments.date DURING LAST_30_DAYS
+                ORDER BY metrics.cost_micros DESC
+            """
+
+            ad_group_rows = execute_query(
+                client,
+                customer_id,
+                ad_group_query
+            )
+
+            ad_group_performance = []
+
+            for row in ad_group_rows:
+                cost = (
+                    row.metrics.cost_micros
+                    / 1_000_000
+                )
+
+                conversions = safe_float(
+                    row.metrics.conversions
+                )
+
+                conversion_value = safe_float(
+                    row.metrics.conversions_value
+                )
+
+                ctr = (
+                    safe_float(row.metrics.ctr)
+                    * 100
+                )
+
+                conversion_rate = (
+                    safe_float(
+                        row.metrics
+                        .conversions_from_interactions_rate
+                    )
+                    * 100
+                )
+
+                average_cpc = (
+                    row.metrics.average_cpc
+                    / 1_000_000
+                )
+
+                cpa = (
+                    cost / conversions
+                    if conversions > 0
+                    else None
+                )
+
+                roas = (
+                    conversion_value / cost
+                    if cost > 0
+                    else None
+                )
+
+                ad_group_performance.append(
+                    {
+                        "ad_group_id": str(
+                            row.ad_group.id
+                        ),
+                        "ad_group_name": (
+                            row.ad_group.name
+                        ),
+                        "status": enum_name(
+                            row.ad_group.status
+                        ),
+                        "type": enum_name(
+                            row.ad_group.type
+                        ),
+                        "impressions": (
+                            row.metrics.impressions
+                        ),
+                        "clicks": (
+                            row.metrics.clicks
+                        ),
+                        "ctr_percent": round(
+                            ctr,
+                            2
+                        ),
+                        "average_cpc": round(
+                            average_cpc,
+                            2
+                        ),
+                        "cost": round(
+                            cost,
+                            2
+                        ),
+                        "conversions": round(
+                            conversions,
+                            2
+                        ),
+                        "conversion_rate_percent": round(
+                            conversion_rate,
+                            2
+                        ),
+                        "conversion_value": round(
+                            conversion_value,
+                            2
+                        ),
+                        "cpa": (
+                            round(cpa, 2)
+                            if cpa is not None
+                            else None
+                        ),
+                        "roas": (
+                            round(roas, 2)
+                            if roas is not None
+                            else None
+                        )
+                    }
+                )
+
+            eligible_for_comparison = [
+                item
+                for item in ad_group_performance
+                if item["clicks"] >= 5
+            ]
+
+            groups_with_conversions = [
+                item
+                for item in eligible_for_comparison
+                if item["conversions"] > 0
+            ]
+
+            groups_without_conversions = [
+                item
+                for item in eligible_for_comparison
+                if (
+                    item["cost"] >= 10
+                    and item["conversions"] == 0
+                )
+            ]
+
+            best_by_cpa = None
+            worst_by_cpa = None
+            best_by_roas = None
+            best_by_conversions = None
+
+            if groups_with_conversions:
+                best_by_cpa = min(
+                    groups_with_conversions,
+                    key=lambda item: item["cpa"]
+                )
+
+                worst_by_cpa = max(
+                    groups_with_conversions,
+                    key=lambda item: item["cpa"]
+                )
+
+                best_by_conversions = max(
+                    groups_with_conversions,
+                    key=lambda item: (
+                        item["conversions"]
+                    )
+                )
+
+                groups_with_roas = [
+                    item
+                    for item in groups_with_conversions
+                    if item["roas"] is not None
+                ]
+
+                if groups_with_roas:
+                    best_by_roas = max(
+                        groups_with_roas,
+                        key=lambda item: item["roas"]
+                    )
+
+            ad_group_comparison = {
+                "total_ad_groups": len(
+                    ad_group_performance
+                ),
+                "groups_with_sufficient_data": len(
+                    eligible_for_comparison
+                ),
+                "best_by_cpa": best_by_cpa,
+                "worst_by_cpa": worst_by_cpa,
+                "best_by_roas": best_by_roas,
+                "best_by_conversion_volume": (
+                    best_by_conversions
+                ),
+                "groups_spending_without_conversions": (
+                    groups_without_conversions
+                )
+            }
+
+            campaign_summary[
+                "ad_group_analysis"
+            ] = {
+                "performance": (
+                    ad_group_performance
+                ),
+                "comparison": (
+                    ad_group_comparison
+                )
+            }
+
+            if groups_without_conversions:
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "AD_GROUP_NO_CONVERSIONS",
+                    (
+                        "Groupes d'annonces avec "
+                        "dépense sans conversion"
+                    ),
+                    (
+                        f"{len(groups_without_conversions)} "
+                        "groupe(s) d'annonces ont dépensé "
+                        "au moins 10 $ avec un minimum de "
+                        "5 clics sans générer de conversion."
+                    ),
+                    (
+                        "Examiner les mots-clés, termes de "
+                        "recherche, annonces et pages de "
+                        "destination de ces groupes. "
+                        "Ne pas les mettre en pause "
+                        "automatiquement."
+                    ),
+                    {
+                        "ad_groups": (
+                            groups_without_conversions
+                        )
+                    }
+                )
+
+            if (
+                best_by_cpa is not None
+                and worst_by_cpa is not None
+                and best_by_cpa["ad_group_id"]
+                != worst_by_cpa["ad_group_id"]
+                and worst_by_cpa["cpa"]
+                >= best_by_cpa["cpa"] * 1.5
+            ):
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "AD_GROUP_CPA_GAP",
+                    (
+                        "Écart important de CPA entre "
+                        "les groupes d'annonces"
+                    ),
+                    (
+                        f"Le groupe "
+                        f"{best_by_cpa['ad_group_name']} "
+                        f"obtient un CPA de "
+                        f"{best_by_cpa['cpa']}, tandis que "
+                        f"{worst_by_cpa['ad_group_name']} "
+                        f"obtient un CPA de "
+                        f"{worst_by_cpa['cpa']}."
+                    ),
+                    (
+                        "Comparer les intentions de recherche, "
+                        "les mots-clés, les annonces et les "
+                        "pages de destination. Évaluer une "
+                        "réallocation prudente seulement après "
+                        "validation humaine."
+                    ),
+                    {
+                        "best_ad_group": best_by_cpa,
+                        "weakest_ad_group": (
+                            worst_by_cpa
+                        )
+                    }
+                )
+
+            audit_coverage[
+                "ad_group_comparison"
+            ] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage[
+                "ad_group_comparison"
+            ] = "FAILED"
+
+            audit_errors.append(
+                {
+                    "audit": (
+                        "ad_group_comparison"
+                    ),
+                    "error": str(error)
+                }
+            )
+
         # ----------------------------------------------------
         # 2. QUALITY SCORE ET TYPES DE CORRESPONDANCE
         # ----------------------------------------------------
