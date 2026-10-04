@@ -1060,28 +1060,108 @@ def campaign_health(
             elif status == "PAUSED":
                 paused_ad_groups += 1
 
-        # ----------------------------------------------------
-        # HEALTH SCORE
+                # ----------------------------------------------------
+        # HEALTH V2
         # ----------------------------------------------------
 
-        health_score = 100
+        strengths = []
+        warnings = []
+        recommendations = []
+
+        # ROAS
+
+        if roas is not None:
+
+            if roas >= 10:
+
+                strengths.append(
+                    f"Excellent ROAS ({round(roas,2)})"
+                )
+
+            elif roas < 2:
+
+                warnings.append(
+                    f"ROAS faible ({round(roas,2)})"
+                )
+
+                recommendations.append(
+                    "Réviser les mots-clés, annonces et pages de destination."
+                )
+
+        # CTR
+
+        if ctr >= 10:
+
+            strengths.append(
+                f"CTR élevé ({round(ctr,2)}%)"
+            )
+
+        elif ctr < 2:
+
+            warnings.append(
+                f"CTR faible ({round(ctr,2)}%)"
+            )
+
+            recommendations.append(
+                "Tester de nouvelles annonces et améliorer la pertinence des mots-clés."
+            )
+
+        # CONVERSIONS
+
+        if conversions > 0:
+
+            strengths.append(
+                f"{round(conversions,2)} conversions sur les 30 derniers jours"
+            )
 
         if conversions == 0 and cost > 50:
-            health_score -= 30
+
+            warnings.append(
+                "Dépenses importantes sans conversion."
+            )
+
+            recommendations.append(
+                "Analyser les termes de recherche et les pages d'atterrissage."
+            )
+
+        # GROUPES D'ANNONCES
+
+        if paused_ad_groups > 0:
+
+            warnings.append(
+                f"{paused_ad_groups} groupe(s) d'annonces sont en pause."
+            )
+
+            recommendations.append(
+                "Valider si les groupes en pause doivent être réactivés."
+            )
+
+        if enabled_ad_groups == total_ad_groups:
+
+            strengths.append(
+                "Tous les groupes d'annonces sont actifs."
+            )
+
+        # SCORE
+
+        health_score = 100
 
         if ctr < 2:
             health_score -= 20
 
-        if enabled_ad_groups == 0:
-            health_score -= 40
+        if conversions == 0 and cost > 50:
+            health_score -= 30
 
-        if cost > 0 and roas is not None:
+        if roas is not None:
 
             if roas < 1:
-                health_score -= 25
+                health_score -= 30
 
             elif roas < 2:
-                health_score -= 10
+                health_score -= 15
+
+        if paused_ad_groups > 0:
+            health_score -= 5
 
         health_score = max(
             0,
@@ -1092,12 +1172,15 @@ def campaign_health(
         )
 
         if health_score >= 90:
+
             health_status = "GOOD"
 
         elif health_score >= 70:
+
             health_status = "WARNING"
 
         else:
+
             health_status = "CRITICAL"
 
         return {
@@ -1194,12 +1277,22 @@ def campaign_health(
 
             "health": {
 
-                "score":
-                    health_score,
+                    "score":
+                        health_score,
 
-                "status":
-                    health_status
-            }
+                    "status":
+                        health_status,
+
+                    "strengths":
+                        strengths,
+
+                    "warnings":
+                        warnings,
+
+                    "recommendations":
+                        recommendations
+         } 
+            
         }
 
     except Exception as error:
@@ -1208,6 +1301,7 @@ def campaign_health(
             "status": "FAILED",
             "error": str(error)
         }
+
 # ----------------------------------------------------
 # PREVIEW BUDGET UPDATE
 # ----------------------------------------------------
