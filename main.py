@@ -36,6 +36,38 @@ app = FastAPI(
     openapi_version="3.0.2",
 )
 
+# ============================================================
+# GOOGLE ADS PERIODS
+# ============================================================
+
+VALID_PERIODS = [
+    "TODAY",
+    "YESTERDAY",
+    "LAST_7_DAYS",
+    "LAST_14_DAYS",
+    "LAST_30_DAYS",
+    "LAST_90_DAYS",
+    "THIS_MONTH",
+    "LAST_MONTH",
+    "THIS_WEEK_MON_TODAY",
+    "LAST_WEEK_MON_SUN"
+]
+
+def validate_period(
+    period: str = "LAST_30_DAYS"
+):
+    period = (
+        period
+        .upper()
+        .strip()
+    )
+
+    if period not in VALID_PERIODS:
+        raise ValueError(
+            f"Invalid period. Valid values: {', '.join(VALID_PERIODS)}"
+        )
+
+    return period
 
 # ============================================================
 # CONFIGURATION GOOGLE ADS
@@ -1992,10 +2024,13 @@ customer_id: str
 @app.get("/search-terms")
 def search_terms(
     customer_id: str,
-    campaign_id: str
+    campaign_id: str,
+    period: str = "LAST_30_DAYS"
 ):
     try:
-
+        period = validate_period(
+            period
+        )
         customer_id = normalize_customer_id(
             customer_id
         )
@@ -2020,7 +2055,7 @@ def search_terms(
                 metrics.conversions_value
             FROM search_term_view
             WHERE campaign.id = {campaign_id}
-              AND segments.date DURING LAST_30_DAYS
+              AND segments.date DURING {period}
             ORDER BY metrics.cost_micros DESC
         """
 
