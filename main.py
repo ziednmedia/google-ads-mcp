@@ -2362,6 +2362,642 @@ def search_terms(
             "error": str(error),
         }
 # ============================================================
+# SEARCH TERM OPPORTUNITIES
+# Analyse en lecture seule des termes de recherche
+# AUCUNE modification automatique
+# ============================================================
+
+@app.get("/search-term-opportunities")
+def search_term_opportunities(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne Google Ads",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie. "
+            "LAST_30_DAYS par défaut."
+        ),
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de début personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de fin personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
+    minimum_clicks: int = Query(
+        default=5,
+        ge=1,
+        le=1000,
+        description=(
+            "Nombre minimum de clics avant "
+            "de générer une opportunité."
+        ),
+    ),
+    minimum_cost: float = Query(
+        default=10.0,
+        ge=0,
+        description=(
+            "Coût minimum sans conversion "
+            "avant de générer une opportunité."
+        ),
+    ),
+    high_cpa_multiplier: float = Query(
+        default=1.5,
+        ge=1.0,
+        le=10.0,
+        description=(
+            "Multiplicateur du CPA moyen utilisé "
+            "pour détecter un CPA trop élevé."
+        ),
+    ),
+):
+    try:
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "error": (
+                    "campaign_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+            }
+
+        date_configuration = build_date_filter(
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        date_filter = (
+            date_configuration["filter"]
+        )
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                search_term_view.search_term,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.ctr,
+                metrics.average_cpc,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value,
+                metrics.conversions_from_interactions_rate
+            FROM search_term_view
+            WHERE campaign.id = {campaign_id}
+              AND {date_filter}
+            ORDER BY metrics.cost_micros DESC
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query,
+        )
+
+        search_terms = []
+        campaign_name = ""
+
+        total_cost = 0.0
+        total_conversions = 0.0
+        total_conversion_value = 0.0
+        total_clicks = 0
+        total_impressions = 0
+
+        for row in response:
+            campaign_name = (
+                row.campaign.name
+            )
+
+            cost = (
+                row.metrics.cost_micros
+                / 1_000_000
+            )
+
+            conversions = safe_float(
+                row.metrics.conversions
+            )
+
+            conversion_value = safe_float(
+                row.metrics.conversions_value
+            )
+
+            average_cpc = (
+                row.metrics.average_cpc
+                / 1_000_000
+            )
+
+            ctr = (
+                safe_float(row.metrics.ctr)
+                * 100
+            )
+
+            conversion_rate = (
+                safe_float(
+                    row.metrics
+                    .conversions_from_interactions_rate
+                )
+                * 100
+            )
+
+            cpa = (
+                cost / conversions
+                if conversions > 0
+                else None
+            )
+
+            roas = (
+                conversion_value / cost
+                if cost > 0
+                else None
+            )
+
+            total_cost += cost
+            total_conversions += conversions
+            total_conversion_value += (
+                conversion_value
+            )
+            total_clicks += (
+                row.metrics.clicks
+            )
+            total_impressions += (
+                row.metrics.impressions
+            )
+
+            search_terms.append(
+                {
+                    "campaign_id": str(
+                        row.campaign.id
+                    ),
+                    "campaign_name": (
+                        row.campaign.name
+                    ),
+                    "ad_group_id": str(
+                        row.ad_group.id
+                    ),
+                    "ad_group_name": (
+                        row.ad_group.name
+                    ),
+                    "search_term": (
+                        row.search_term_view
+                        .search_term
+                    ),
+                    "impressions": (
+                        row.metrics.impressions
+                    ),
+                    "clicks": (
+                        row.metrics.clicks
+                    ),
+                    "ctr_percent": round(
+                        ctr,
+                        2
+                    ),
+                    "average_cpc": round(
+                        average_cpc,
+                        2
+                    ),
+                    "cost": round(
+                        cost,
+                        2
+                    ),
+                    "conversions": round(
+                        conversions,
+                        2
+                    ),
+                    "conversion_rate_percent": (
+                        round(
+                            conversion_rate,
+                            2
+                        )
+                    ),
+                    "conversion_value": round(
+                        conversion_value,
+                        2
+                    ),
+                    "cpa": (
+                        round(cpa, 2)
+                        if cpa is not None
+                        else None
+                    ),
+                    "roas": (
+                        round(roas, 2)
+                        if roas is not None
+                        else None
+                    ),
+                }
+            )
+
+        if not search_terms:
+            return {
+                "status": "NO_DATA",
+                "customer_id": customer_id,
+                "campaign_id": campaign_id,
+                "date_range": {
+                    "mode": (
+                        date_configuration["mode"]
+                    ),
+                    "period": (
+                        date_configuration["period"]
+                    ),
+                    "start_date": (
+                        date_configuration[
+                            "start_date"
+                        ]
+                    ),
+                    "end_date": (
+                        date_configuration[
+                            "end_date"
+                        ]
+                    ),
+                },
+                "message": (
+                    "Aucun terme de recherche "
+                    "n'a été retourné pour cette "
+                    "campagne et cette période."
+                ),
+                "automatic_action": False,
+            }
+
+        campaign_average_cpa = (
+            total_cost / total_conversions
+            if total_conversions > 0
+            else None
+        )
+
+        campaign_roas = (
+            total_conversion_value / total_cost
+            if total_cost > 0
+            else None
+        )
+
+        # ----------------------------------------------------
+        # CATÉGORIE 1 :
+        # DÉPENSE SANS CONVERSION
+        # ----------------------------------------------------
+
+        wasted_spend_terms = []
+
+        for item in search_terms:
+            if (
+                item["clicks"] >= minimum_clicks
+                and item["cost"] >= minimum_cost
+                and item["conversions"] == 0
+            ):
+                wasted_spend_terms.append(
+                    {
+                        **item,
+                        "priority": "HIGH",
+                        "opportunity_type": (
+                            "WASTED_SPEND"
+                        ),
+                        "recommendation": (
+                            "Vérifier l'intention de "
+                            "recherche. Évaluer ce terme "
+                            "comme mot-clé négatif seulement "
+                            "après validation humaine."
+                        ),
+                    }
+                )
+
+        wasted_spend_terms.sort(
+            key=lambda item: item["cost"],
+            reverse=True,
+        )
+
+        # ----------------------------------------------------
+        # CATÉGORIE 2 :
+        # CPA ÉLEVÉ PAR RAPPORT À LA CAMPAGNE
+        # ----------------------------------------------------
+
+        high_cpa_terms = []
+
+        if campaign_average_cpa is not None:
+            high_cpa_threshold = (
+                campaign_average_cpa
+                * high_cpa_multiplier
+            )
+
+            for item in search_terms:
+                if (
+                    item["clicks"] >= minimum_clicks
+                    and item["cpa"] is not None
+                    and item["cpa"]
+                    > high_cpa_threshold
+                ):
+                    high_cpa_terms.append(
+                        {
+                            **item,
+                            "priority": "MEDIUM",
+                            "opportunity_type": (
+                                "HIGH_CPA"
+                            ),
+                            "campaign_average_cpa": (
+                                round(
+                                    campaign_average_cpa,
+                                    2
+                                )
+                            ),
+                            "high_cpa_threshold": (
+                                round(
+                                    high_cpa_threshold,
+                                    2
+                                )
+                            ),
+                            "recommendation": (
+                                "Comparer l'intention, le "
+                                "mot-clé déclencheur, l'annonce "
+                                "et la page de destination. "
+                                "Ne pas exclure automatiquement."
+                            ),
+                        }
+                    )
+
+            high_cpa_terms.sort(
+                key=lambda item: item["cpa"],
+                reverse=True,
+            )
+
+        # ----------------------------------------------------
+        # CATÉGORIE 3 :
+        # TERMES PERFORMANTS
+        # ----------------------------------------------------
+
+        strong_terms = []
+
+        if campaign_average_cpa is not None:
+            for item in search_terms:
+                if (
+                    item["clicks"] >= minimum_clicks
+                    and item["conversions"] > 0
+                    and item["cpa"] is not None
+                    and item["cpa"]
+                    <= campaign_average_cpa
+                ):
+                    strong_terms.append(
+                        {
+                            **item,
+                            "priority": "INFO",
+                            "opportunity_type": (
+                                "STRONG_SEARCH_TERM"
+                            ),
+                            "campaign_average_cpa": (
+                                round(
+                                    campaign_average_cpa,
+                                    2
+                                )
+                            ),
+                            "recommendation": (
+                                "Vérifier si ce terme existe "
+                                "déjà comme mot-clé. Sinon, "
+                                "évaluer son ajout en expression "
+                                "ou en mot-clé exact."
+                            ),
+                        }
+                    )
+
+            strong_terms.sort(
+                key=lambda item: (
+                    item["conversions"],
+                    -item["cpa"],
+                ),
+                reverse=True,
+            )
+
+        # ----------------------------------------------------
+        # SYNTHÈSE EXÉCUTIVE
+        # ----------------------------------------------------
+
+        estimated_wasted_cost = round(
+            sum(
+                item["cost"]
+                for item in wasted_spend_terms
+            ),
+            2,
+        )
+
+        total_opportunities = (
+            len(wasted_spend_terms)
+            + len(high_cpa_terms)
+            + len(strong_terms)
+        )
+
+        main_risk = (
+            "Aucun gaspillage important détecté "
+            "selon les seuils actuels."
+        )
+
+        recommended_first_action = (
+            "Continuer la surveillance des termes "
+            "de recherche."
+        )
+
+        estimated_priority = "LOW"
+
+        if wasted_spend_terms:
+            top_wasted_term = (
+                wasted_spend_terms[0]
+            )
+
+            main_risk = (
+                f"Le terme "
+                f"'{top_wasted_term['search_term']}' "
+                f"a coûté "
+                f"{top_wasted_term['cost']} "
+                f"sans conversion."
+            )
+
+            recommended_first_action = (
+                "Vérifier l'intention de ce terme "
+                "et évaluer un mot-clé négatif "
+                "après validation humaine."
+            )
+
+            estimated_priority = "HIGH"
+
+        elif high_cpa_terms:
+            top_high_cpa_term = (
+                high_cpa_terms[0]
+            )
+
+            main_risk = (
+                f"Le terme "
+                f"'{top_high_cpa_term['search_term']}' "
+                f"a un CPA de "
+                f"{top_high_cpa_term['cpa']}, "
+                f"supérieur au CPA moyen de "
+                f"{round(campaign_average_cpa, 2)}."
+            )
+
+            recommended_first_action = (
+                "Analyser le mot-clé déclencheur, "
+                "l'annonce et la page de destination."
+            )
+
+            estimated_priority = "MEDIUM"
+
+        return {
+            "status": "SUCCESS",
+            "mode": "RECOMMENDATION_ONLY",
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "campaign_name": campaign_name,
+            "date_range": {
+                "mode": (
+                    date_configuration["mode"]
+                ),
+                "period": (
+                    date_configuration["period"]
+                ),
+                "start_date": (
+                    date_configuration[
+                        "start_date"
+                    ]
+                ),
+                "end_date": (
+                    date_configuration[
+                        "end_date"
+                    ]
+                ),
+            },
+            "thresholds": {
+                "minimum_clicks": (
+                    minimum_clicks
+                ),
+                "minimum_cost": (
+                    minimum_cost
+                ),
+                "high_cpa_multiplier": (
+                    high_cpa_multiplier
+                ),
+            },
+            "campaign_summary": {
+                "search_terms_analyzed": len(
+                    search_terms
+                ),
+                "impressions": (
+                    total_impressions
+                ),
+                "clicks": total_clicks,
+                "cost": round(
+                    total_cost,
+                    2
+                ),
+                "conversions": round(
+                    total_conversions,
+                    2
+                ),
+                "conversion_value": round(
+                    total_conversion_value,
+                    2
+                ),
+                "average_cpa": (
+                    round(
+                        campaign_average_cpa,
+                        2
+                    )
+                    if campaign_average_cpa
+                    is not None
+                    else None
+                ),
+                "roas": (
+                    round(campaign_roas, 2)
+                    if campaign_roas
+                    is not None
+                    else None
+                ),
+            },
+            "executive_summary": {
+                "main_risk": main_risk,
+                "recommended_first_action": (
+                    recommended_first_action
+                ),
+                "estimated_priority": (
+                    estimated_priority
+                ),
+                "estimated_wasted_cost": (
+                    estimated_wasted_cost
+                ),
+            },
+            "opportunity_counts": {
+                "total": (
+                    total_opportunities
+                ),
+                "wasted_spend": len(
+                    wasted_spend_terms
+                ),
+                "high_cpa": len(
+                    high_cpa_terms
+                ),
+                "strong_terms": len(
+                    strong_terms
+                ),
+            },
+            "negative_keyword_candidates": (
+                wasted_spend_terms[:50]
+            ),
+            "high_cpa_terms": (
+                high_cpa_terms[:50]
+            ),
+            "strong_search_terms": (
+                strong_terms[:50]
+            ),
+            "disclaimer": (
+                "Les candidats négatifs sont des "
+                "recommandations basées sur les seuils "
+                "sélectionnés. Vérifier l'intention, "
+                "la valeur commerciale et le contexte "
+                "avant toute exclusion."
+            ),
+        }
+
+    except ValueError as error:
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
+# ============================================================
 # TERMES DE RECHERCHE
 # ============================================================
 
