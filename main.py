@@ -3187,6 +3187,363 @@ def search_term_opportunities(
             "automatic_action": False,
             "error": str(error),
         }
+
+# ============================================================ ============================================================ ============================================================ 
+
+# ============================================================
+# NEGATIVE KEYWORDS
+# Lecture seule des mots-clés négatifs
+# Niveau campagne et groupes d'annonces
+# ============================================================
+
+@app.get("/negative-keywords")
+def negative_keywords(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne Google Ads",
+    ),
+):
+    try:
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "error": (
+                    "campaign_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        # ----------------------------------------------------
+        # VÉRIFIER LA CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.advertising_channel_type
+            FROM campaign
+            WHERE campaign.id = {campaign_id}
+        """
+
+        campaign_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=campaign_query,
+            )
+        )
+
+        campaign_row = next(
+            iter(campaign_response),
+            None
+        )
+
+        if not campaign_row:
+            return {
+                "status": "FAILED",
+                "error": "Campaign not found",
+            }
+
+        campaign_name = (
+            campaign_row.campaign.name
+        )
+
+        campaign_type = enum_name(
+            campaign_row
+            .campaign
+            .advertising_channel_type
+        )
+
+        # ----------------------------------------------------
+        # MOTS-CLÉS NÉGATIFS AU NIVEAU CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_negative_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign_criterion.criterion_id,
+                campaign_criterion.status,
+                campaign_criterion.negative,
+                campaign_criterion.keyword.text,
+                campaign_criterion.keyword.match_type,
+                campaign_criterion.resource_name
+            FROM campaign_criterion
+            WHERE campaign.id = {campaign_id}
+              AND campaign_criterion.type = 'KEYWORD'
+              AND campaign_criterion.negative = TRUE
+        """
+
+        campaign_negative_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=campaign_negative_query,
+            )
+        )
+
+        campaign_negative_keywords = []
+
+        for row in campaign_negative_response:
+            keyword_text = (
+                row.campaign_criterion
+                .keyword
+                .text
+            )
+
+            match_type = enum_name(
+                row.campaign_criterion
+                .keyword
+                .match_type
+            )
+
+            campaign_negative_keywords.append(
+                {
+                    "level": "CAMPAIGN",
+                    "campaign_id": str(
+                        row.campaign.id
+                    ),
+                    "campaign_name": (
+                        row.campaign.name
+                    ),
+                    "ad_group_id": None,
+                    "ad_group_name": None,
+                    "criterion_id": str(
+                        row.campaign_criterion
+                        .criterion_id
+                    ),
+                    "keyword": keyword_text,
+                    "normalized_keyword": (
+                        keyword_text
+                        .strip()
+                        .casefold()
+                    ),
+                    "match_type": match_type,
+                    "status": enum_name(
+                        row.campaign_criterion
+                        .status
+                    ),
+                    "negative": True,
+                    "resource_name": (
+                        row.campaign_criterion
+                        .resource_name
+                    ),
+                }
+            )
+
+        # ----------------------------------------------------
+        # MOTS-CLÉS NÉGATIFS AU NIVEAU GROUPE D'ANNONCES
+        # ----------------------------------------------------
+
+        ad_group_negative_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group.status,
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.status,
+                ad_group_criterion.negative,
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type,
+                ad_group_criterion.resource_name
+            FROM ad_group_criterion
+            WHERE campaign.id = {campaign_id}
+              AND ad_group_criterion.type = 'KEYWORD'
+              AND ad_group_criterion.negative = TRUE
+        """
+
+        ad_group_negative_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=ad_group_negative_query,
+            )
+        )
+
+        ad_group_negative_keywords = []
+
+        for row in ad_group_negative_response:
+            keyword_text = (
+                row.ad_group_criterion
+                .keyword
+                .text
+            )
+
+            match_type = enum_name(
+                row.ad_group_criterion
+                .keyword
+                .match_type
+            )
+
+            ad_group_negative_keywords.append(
+                {
+                    "level": "AD_GROUP",
+                    "campaign_id": str(
+                        row.campaign.id
+                    ),
+                    "campaign_name": (
+                        row.campaign.name
+                    ),
+                    "ad_group_id": str(
+                        row.ad_group.id
+                    ),
+                    "ad_group_name": (
+                        row.ad_group.name
+                    ),
+                    "ad_group_status": enum_name(
+                        row.ad_group.status
+                    ),
+                    "criterion_id": str(
+                        row.ad_group_criterion
+                        .criterion_id
+                    ),
+                    "keyword": keyword_text,
+                    "normalized_keyword": (
+                        keyword_text
+                        .strip()
+                        .casefold()
+                    ),
+                    "match_type": match_type,
+                    "status": enum_name(
+                        row.ad_group_criterion
+                        .status
+                    ),
+                    "negative": True,
+                    "resource_name": (
+                        row.ad_group_criterion
+                        .resource_name
+                    ),
+                }
+            )
+
+        # ----------------------------------------------------
+        # INDEX POUR VÉRIFICATIONS RAPIDES
+        # ----------------------------------------------------
+
+        all_negative_keywords = (
+            campaign_negative_keywords
+            + ad_group_negative_keywords
+        )
+
+        unique_normalized_keywords = sorted(
+            {
+                item["normalized_keyword"]
+                for item in all_negative_keywords
+            }
+        )
+
+        keywords_by_match_type = {
+            "EXACT": 0,
+            "PHRASE": 0,
+            "BROAD": 0,
+            "OTHER": 0,
+        }
+
+        for item in all_negative_keywords:
+            match_type = item["match_type"]
+
+            if match_type in keywords_by_match_type:
+                keywords_by_match_type[
+                    match_type
+                ] += 1
+
+            else:
+                keywords_by_match_type[
+                    "OTHER"
+                ] += 1
+
+        campaign_negative_keywords.sort(
+            key=lambda item: (
+                item["keyword"].casefold(),
+                item["match_type"],
+            )
+        )
+
+        ad_group_negative_keywords.sort(
+            key=lambda item: (
+                (
+                    item["ad_group_name"]
+                    or ""
+                ).casefold(),
+                item["keyword"].casefold(),
+                item["match_type"],
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "mode": "READ_ONLY",
+            "automatic_action": False,
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "campaign_name": campaign_name,
+            "campaign_status": enum_name(
+                campaign_row.campaign.status
+            ),
+            "campaign_type": campaign_type,
+            "summary": {
+                "total_negative_keywords": len(
+                    all_negative_keywords
+                ),
+                "unique_negative_keywords": len(
+                    unique_normalized_keywords
+                ),
+                "campaign_level": len(
+                    campaign_negative_keywords
+                ),
+                "ad_group_level": len(
+                    ad_group_negative_keywords
+                ),
+                "by_match_type": (
+                    keywords_by_match_type
+                ),
+            },
+            "campaign_negative_keywords": (
+                campaign_negative_keywords
+            ),
+            "ad_group_negative_keywords": (
+                ad_group_negative_keywords
+            ),
+            "all_negative_keywords": (
+                all_negative_keywords
+            ),
+            "negative_keyword_index": (
+                unique_normalized_keywords
+            ),
+            "scope_notice": (
+                "Cette réponse contient les mots-clés "
+                "négatifs ajoutés directement à la "
+                "campagne et aux groupes d'annonces."
+            ),
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
 # ============================================================
 # TERMES DE RECHERCHE
 # ============================================================
