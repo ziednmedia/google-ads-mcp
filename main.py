@@ -1,6 +1,6 @@
 import os
 from typing import Any, Dict, List, Optional
-
+from datetime import date, timedelta
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from google.ads.googleads.client import GoogleAdsClient
@@ -37,37 +37,128 @@ app = FastAPI(
 )
 
 # ============================================================
-# GOOGLE ADS PERIODS
+# GOOGLE ADS DATE FILTERS
 # ============================================================
 
-VALID_PERIODS = [
+VALID_PERIODS = {
     "TODAY",
     "YESTERDAY",
     "LAST_7_DAYS",
     "LAST_14_DAYS",
     "LAST_30_DAYS",
-    "LAST_90_DAYS",
+    "LAST_BUSINESS_WEEK",
     "THIS_MONTH",
     "LAST_MONTH",
+    "THIS_WEEK_SUN_TODAY",
     "THIS_WEEK_MON_TODAY",
-    "LAST_WEEK_MON_SUN"
-]
+    "LAST_WEEK_SUN_SAT",
+    "LAST_WEEK_MON_SUN",
+}
 
-def validate_period(
-    period: str = "LAST_30_DAYS"
-):
-    period = (
-        period
-        .upper()
-        .strip()
-    )
 
-    if period not in VALID_PERIODS:
-        raise ValueError(
-            f"Invalid period. Valid values: {', '.join(VALID_PERIODS)}"
+def validate_iso_date(
+    value: str,
+    field_name: str
+) -> str:
+    try:
+        parsed_date = date.fromisoformat(
+            value
         )
 
-    return period
+        return parsed_date.isoformat()
+
+    except ValueError as error:
+        raise ValueError(
+            f"{field_name} doit respecter "
+            f"le format YYYY-MM-DD."
+        ) from error
+
+
+def build_date_filter(
+    period: str = "LAST_30_DAYS",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+) -> Dict[str, str\]:
+
+    period = (
+        period
+        .strip()
+        .upper()
+    )
+
+    # Les dates personnalisées doivent être fournies ensemble.
+    if (
+        start_date is not None
+        or end_date is not None
+    ):
+        if not start_date or not end_date:
+            raise ValueError(
+                "start_date et end_date doivent "
+                "être fournis ensemble."
+            )
+
+        normalized_start_date = (
+            validate_iso_date(
+                start_date,
+                "start_date"
+            )
+        )
+
+        normalized_end_date = (
+            validate_iso_date(
+                end_date,
+                "end_date"
+            )
+        )
+
+        if (
+            normalized_start_date
+            > normalized_end_date
+        ):
+            raise ValueError(
+                "start_date ne peut pas être "
+                "postérieure à end_date."
+            )
+
+        return {
+            "filter": (
+                "segments.date BETWEEN "
+                f"'{normalized_start_date}' "
+                "AND "
+                f"'{normalized_end_date}'"
+            ),
+            "mode": "CUSTOM_DATE_RANGE",
+            "period": "CUSTOM",
+            "start_date": (
+                normalized_start_date
+            ),
+            "end_date": (
+                normalized_end_date
+            ),
+        }
+
+    if period not in VALID_PERIODS:
+        valid_values = ", ".join(
+            sorted(VALID_PERIODS)
+        )
+
+        raise ValueError(
+            f"Période invalide : {period}. "
+            f"Valeurs acceptées : "
+            f"{valid_values}. "
+            f"Pour une période personnalisée, "
+            f"utiliser start_date et end_date."
+        )
+
+    return {
+        "filter": (
+            f"segments.date DURING {period}"
+        ),
+        "mode": "PREDEFINED_PERIOD",
+        "period": period,
+        "start_date": None,
+        "end_date": None,
+    }
 
 # ============================================================
 # CONFIGURATION GOOGLE ADS
@@ -2021,30 +2112,92 @@ customer_id: str
 # ============================================================
 # SEARCH TERMES
 # ============================================================
+# ============================================================
+# SEARCH TERMS
+# ============================================================
 @app.get("/search-terms")
 def search_terms(
-    customer_id: str,
-    campaign_id: str,
-    period: str = "LAST_30_DAYS"
+    customer_id: str = Query(
+        ...,
+        description=(
+            "ID du compte Google Ads"
+        ),
+    ),
+    campaign_id: str = Query(
+        ...,
+        description=(
+            "ID de la campagne Google Ads"
+        ),
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie. "
+            "La valeur par défaut est "
+            "LAST_30_DAYS."
+        ),
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de début personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de fin personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
 ):
     try:
-        period = validate_period(
-            period
-        )
         customer_id = normalize_customer_id(
             customer_id
         )
 
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "error": (
+                    "campaign_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+            }
+
+        date_configuration = (
+            build_date_filter(
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
+        date_filter = (
+            date_configuration["filter"]
+        )
+
         client = get_google_ads_client()
 
-        google_ads_service = client.get_service(
-            "GoogleAdsService"
+        google_ads_service = (
+            client.get_service(
+                "GoogleAdsService"
+            )
         )
 
         query = f"""
             SELECT
                 campaign.id,
                 campaign.name,
+                ad_group.id,
+                ad_group.name,
                 search_term_view.search_term,
                 metrics.impressions,
                 metrics.clicks,
@@ -2055,41 +2208,46 @@ def search_terms(
                 metrics.conversions_value
             FROM search_term_view
             WHERE campaign.id = {campaign_id}
-              AND segments.date DURING {period}
+              AND {date_filter}
             ORDER BY metrics.cost_micros DESC
         """
 
         response = google_ads_service.search(
             customer_id=customer_id,
-            query=query
+            query=query,
         )
 
         results = []
+        campaign_name = ""
 
         for row in response:
+            campaign_name = (
+                row.campaign.name
+            )
 
             cost = (
                 row.metrics.cost_micros
-                / 1000000
+                / 1_000_000
             )
 
-            conversions = float(
+            conversions = safe_float(
                 row.metrics.conversions
             )
 
-            conversion_value = float(
+            conversion_value = safe_float(
                 row.metrics.conversions_value
             )
 
             average_cpc = (
                 row.metrics.average_cpc
-                / 1000000
+                / 1_000_000
             )
 
             ctr = (
-                float(
+                safe_float(
                     row.metrics.ctr
-                ) * 100
+                )
+                * 100
             )
 
             cpa = (
@@ -2106,83 +2264,102 @@ def search_terms(
 
             results.append(
                 {
-                    "search_term":
-                        row.search_term_view.search_term,
-
-                    "impressions":
-                        row.metrics.impressions,
-
-                    "clicks":
-                        row.metrics.clicks,
-
-                    "ctr_percent":
-                        round(
-                            ctr,
-                            2
-                        ),
-
-                    "average_cpc":
-                        round(
-                            average_cpc,
-                            2
-                        ),
-
-                    "cost":
-                        round(
-                            cost,
-                            2
-                        ),
-
-                    "conversions":
-                        round(
-                            conversions,
-                            2
-                        ),
-
-                    "conversion_value":
-                        round(
-                            conversion_value,
-                            2
-                        ),
-
-                    "cpa":
-                        round(
-                            cpa,
-                            2
-                        )
-                        if cpa
-                        else None,
-
-                    "roas":
-                        round(
-                            roas,
-                            2
-                        )
-                        if roas
+                    "campaign_id": str(
+                        row.campaign.id
+                    ),
+                    "campaign_name": (
+                        row.campaign.name
+                    ),
+                    "ad_group_id": str(
+                        row.ad_group.id
+                    ),
+                    "ad_group_name": (
+                        row.ad_group.name
+                    ),
+                    "search_term": (
+                        row.search_term_view
+                        .search_term
+                    ),
+                    "impressions": (
+                        row.metrics.impressions
+                    ),
+                    "clicks": (
+                        row.metrics.clicks
+                    ),
+                    "ctr_percent": round(
+                        ctr,
+                        2
+                    ),
+                    "average_cpc": round(
+                        average_cpc,
+                        2
+                    ),
+                    "cost": round(
+                        cost,
+                        2
+                    ),
+                    "conversions": round(
+                        conversions,
+                        2
+                    ),
+                    "conversion_value": round(
+                        conversion_value,
+                        2
+                    ),
+                    "cpa": (
+                        round(cpa, 2)
+                        if cpa is not None
                         else None
+                    ),
+                    "roas": (
+                        round(roas, 2)
+                        if roas is not None
+                        else None
+                    ),
                 }
             )
 
         return {
-
-            "customer_id":
-                customer_id,
-
-            "campaign_id":
-                campaign_id,
-
-            "search_terms_count":
-                len(results),
-
-            "search_terms":
+            "status": "SUCCESS",
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "campaign_name": (
+                campaign_name
+            ),
+            "date_range": {
+                "mode": (
+                    date_configuration["mode"]
+                ),
+                "period": (
+                    date_configuration["period"]
+                ),
+                "start_date": (
+                    date_configuration[
+                        "start_date"
+                    ]
+                ),
+                "end_date": (
+                    date_configuration[
+                        "end_date"
+                    ]
+                ),
+            },
+            "search_terms_count": len(
                 results
+            ),
+            "search_terms": results,
+        }
+
+    except ValueError as error:
+        return {
+            "status": "FAILED",
+            "error": str(error),
         }
 
     except Exception as error:
-
         return {
             "status": "FAILED",
-            "error": str(error)
+            "error": str(error),
         }
 # ============================================================
 # TERMES DE RECHERCHE
