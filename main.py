@@ -78,7 +78,7 @@ def build_date_filter(
     period: str = "LAST_30_DAYS",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None
-) -> Dict[str, str\]:
+) -> Dict[str, str]:
 
     period = (
         period
