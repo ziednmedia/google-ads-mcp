@@ -931,6 +931,284 @@ def pause_campaign(
             "error": str(error)
         }
 # ----------------------------------------------------
+# CAMPAIGN HEALTH
+# ----------------------------------------------------
+@app.get("/campaign-health")
+def campaign_health(
+    customer_id: str,
+    campaign_id: str
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        # ----------------------------------------------------
+        # CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.advertising_channel_type,
+                campaign_budget.amount_micros,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.ctr,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM campaign
+            WHERE campaign.id = {campaign_id}
+              AND segments.date DURING LAST_30_DAYS
+        """
+
+        campaign_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=campaign_query
+            )
+        )
+
+        campaign_row = next(
+            iter(campaign_response),
+            None
+        )
+
+        if not campaign_row:
+            return {
+                "status": "FAILED",
+                "error":
+                    "Campaign not found"
+            }
+
+        cost = (
+            campaign_row.metrics.cost_micros
+            / 1000000
+        )
+
+        conversions = float(
+            campaign_row.metrics.conversions
+        )
+
+        conversion_value = float(
+            campaign_row.metrics.conversions_value
+        )
+
+        ctr = (
+            float(
+                campaign_row.metrics.ctr
+            )
+            * 100
+        )
+
+        cpa = (
+            cost / conversions
+            if conversions > 0
+            else None
+        )
+
+        roas = (
+            conversion_value / cost
+            if cost > 0
+            else None
+        )
+
+        # ----------------------------------------------------
+        # GROUPES D'ANNONCES
+        # ----------------------------------------------------
+
+        ad_group_query = f"""
+            SELECT
+                ad_group.id,
+                ad_group.status
+            FROM ad_group
+            WHERE campaign.id = {campaign_id}
+        """
+
+        ad_group_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=ad_group_query
+            )
+        )
+
+        total_ad_groups = 0
+        enabled_ad_groups = 0
+        paused_ad_groups = 0
+
+        for row in ad_group_response:
+
+            total_ad_groups += 1
+
+            status = enum_name(
+                row.ad_group.status
+            )
+
+            if status == "ENABLED":
+                enabled_ad_groups += 1
+
+            elif status == "PAUSED":
+                paused_ad_groups += 1
+
+        # ----------------------------------------------------
+        # HEALTH SCORE
+        # ----------------------------------------------------
+
+        health_score = 100
+
+        if conversions == 0 and cost > 50:
+            health_score -= 30
+
+        if ctr < 2:
+            health_score -= 20
+
+        if enabled_ad_groups == 0:
+            health_score -= 40
+
+        if cost > 0 and roas is not None:
+
+            if roas < 1:
+                health_score -= 25
+
+            elif roas < 2:
+                health_score -= 10
+
+        health_score = max(
+            0,
+            min(
+                100,
+                round(health_score)
+            )
+        )
+
+        if health_score >= 90:
+            health_status = "GOOD"
+
+        elif health_score >= 70:
+            health_status = "WARNING"
+
+        else:
+            health_status = "CRITICAL"
+
+        return {
+
+            "campaign_id":
+                str(
+                    campaign_row.campaign.id
+                ),
+
+            "campaign_name":
+                campaign_row.campaign.name,
+
+            "campaign_status":
+                enum_name(
+                    campaign_row.campaign.status
+                ),
+
+            "campaign_type":
+                enum_name(
+                    campaign_row
+                    .campaign
+                    .advertising_channel_type
+                ),
+
+            "budget":
+                round(
+                    campaign_row
+                    .campaign_budget
+                    .amount_micros
+                    / 1000000,
+                    2
+                ),
+
+            "last_30_days": {
+
+                "impressions":
+                    campaign_row.metrics.impressions,
+
+                "clicks":
+                    campaign_row.metrics.clicks,
+
+                "ctr_percent":
+                    round(
+                        ctr,
+                        2
+                    ),
+
+                "cost":
+                    round(
+                        cost,
+                        2
+                    ),
+
+                "conversions":
+                    round(
+                        conversions,
+                        2
+                    ),
+
+                "conversion_value":
+                    round(
+                        conversion_value,
+                        2
+                    ),
+
+                "cpa":
+                    round(
+                        cpa,
+                        2
+                    )
+                    if cpa
+                    else None,
+
+                "roas":
+                    round(
+                        roas,
+                        2
+                    )
+                    if roas
+                    else None
+            },
+
+            "ad_groups": {
+
+                "total":
+                    total_ad_groups,
+
+                "enabled":
+                    enabled_ad_groups,
+
+                "paused":
+                    paused_ad_groups
+            },
+
+            "health": {
+
+                "score":
+                    health_score,
+
+                "status":
+                    health_status
+            }
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+# ----------------------------------------------------
 # PREVIEW BUDGET UPDATE
 # ----------------------------------------------------
 
