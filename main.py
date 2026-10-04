@@ -2153,7 +2153,7 @@ def search_terms(
 # TERMES DE RECHERCHE
 # ============================================================
 
-@app.get("/search-terms")
+@app.get("/search-terms-old")
 def search_terms(
 customer_id: str
 ):
