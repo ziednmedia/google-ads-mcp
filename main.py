@@ -1986,7 +1986,119 @@ customer_id: str
     except Exception as error:
         return {"error": str(error)}
 
+# ============================================================
+# SEARCH TERMES
+# ============================================================
+@app.get("/search-terms")
+def search_terms(
+    customer_id: str,
+    campaign_id: str
+):
+    try:
 
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                search_term_view.search_term,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.ctr,
+                metrics.average_cpc,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM search_term_view
+            WHERE campaign.id = {campaign_id}
+              AND segments.date DURING LAST_30_DAYS
+            ORDER BY metrics.cost_micros DESC
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        results = []
+
+        for row in response:
+
+            cost = (
+                row.metrics.cost_micros
+                / 1000000
+            )
+
+            conversions = float(
+                row.metrics.conversions
+            )
+
+            conversion_value = float(
+                row.metrics.conversions_value
+            )
+
+            average_cpc = (
+                row.metrics.average_cpc
+                / 1000000
+            )
+
+            ctr = (
+                float(
+                    row.metrics.ctr
+                ) * 100
+            )
+
+            cpa = (
+                cost / conversions
+                if conversions > 0
+                else None
+            )
+
+            roas = (
+                conversion_value / cost
+                if cost > 0
+                else None
+            )
+
+            results.append(
+                {
+                    "search_term":
+                        row.search_term_view.search_term,
+
+                    "impressions":
+                        row.metrics.impressions,
+
+                    "clicks":
+                        row.metrics.clicks,
+
+                    "ctr_percent":
+                        round(
+                            ctr,
+                            2
+                        ),
+
+                    "average_cpc":
+                        round(
+                            average_cpc,
+                            2
+                        ),
+
+                    "cost":
+                        round(
+                            cost,
+                            2
+                        ),
+
+      
 # ============================================================
 # TERMES DE RECHERCHE
 # ============================================================
