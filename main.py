@@ -1,6 +1,6 @@
 import os
 from typing import Any, Dict, List, Optional
-from datetime import date, timedelta
+from datetime import date
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from google.ads.googleads.client import GoogleAdsClient
