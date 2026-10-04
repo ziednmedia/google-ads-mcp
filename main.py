@@ -705,6 +705,137 @@ def enable_ad_group(
             "error": str(error)
         }
 # ----------------------------------------------------
+# ENABLE CAMPAGNE
+# ----------------------------------------------------
+@app.post("/enable-campaign")
+def enable_campaign(
+    request: CampaignActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if not expected_code:
+            return {
+                "status": "FAILED",
+                "error":
+                    "CONFIRMATION_CODE is not configured"
+            }
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "error":
+                    "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        campaign_service = client.get_service(
+            "CampaignService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.resource_name
+            FROM campaign
+            WHERE campaign.id = {request.campaign_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error":
+                    "Campaign not found"
+            }
+
+        previous_status = enum_name(
+            row.campaign.status
+        )
+
+        if previous_status == "ENABLED":
+            return {
+                "status": "NO_CHANGE",
+                "campaign_id":
+                    str(row.campaign.id),
+                "campaign_name":
+                    row.campaign.name,
+                "previous_status":
+                    previous_status,
+                "new_status":
+                    "ENABLED",
+                "message":
+                    "Campaign is already enabled"
+            }
+
+        operation = client.get_type(
+            "CampaignOperation"
+        )
+
+        operation.update.resource_name = (
+            row.campaign.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .CampaignStatusEnum
+            .ENABLED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = campaign_service.mutate_campaigns(
+            customer_id=customer_id,
+            operations=[operation]
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_id":
+                str(row.campaign.id),
+            "campaign_name":
+                row.campaign.name,
+            "previous_status":
+                previous_status,
+            "new_status":
+                "ENABLED",
+            "resource_name":
+                result.results[0]
+                .resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+# ----------------------------------------------------
 # PAUSE CAMPAGNE
 # ----------------------------------------------------
 @app.post("/pause-campaign")
