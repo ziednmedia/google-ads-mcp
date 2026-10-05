@@ -2025,14 +2025,12 @@ def campaign_performance(
         ...,
         description="ID du compte Google Ads",
     ),
-
     period: str = Query(
         default="LAST_30_DAYS",
         description=(
             "Période Google Ads prédéfinie."
         ),
     ),
-
     start_date: Optional[str] = Query(
         default=None,
         description=(
@@ -2040,7 +2038,6 @@ def campaign_performance(
             "au format YYYY-MM-DD."
         ),
     ),
-
     end_date: Optional[str] = Query(
         default=None,
         description=(
@@ -2067,6 +2064,21 @@ def campaign_performance(
             date_configuration["filter"]
         )
 
+        date_range = {
+            "mode": (
+                date_configuration["mode"]
+            ),
+            "period": (
+                date_configuration["period"]
+            ),
+            "start_date": (
+                date_configuration["start_date"]
+            ),
+            "end_date": (
+                date_configuration["end_date"]
+            ),
+        }
+
         client = get_google_ads_client()
 
         query = f"""
@@ -2074,14 +2086,20 @@ def campaign_performance(
                 campaign.id,
                 campaign.name,
                 campaign.status,
+                campaign.advertising_channel_type,
+                campaign_budget.amount_micros,
                 metrics.impressions,
                 metrics.clicks,
                 metrics.ctr,
+                metrics.average_cpc,
                 metrics.cost_micros,
                 metrics.conversions,
-                metrics.conversions_value
+                metrics.conversions_value,
+                metrics.conversions_from_interactions_rate
             FROM campaign
-            WHERE {date_filter}
+            WHERE campaign.status != 'REMOVED'
+              AND {date_filter}
+            ORDER BY metrics.cost_micros DESC
         """
 
         response = execute_query(
@@ -2105,6 +2123,24 @@ def campaign_performance(
 
             conversion_value = safe_float(
                 row.metrics.conversions_value
+            )
+
+            average_cpc = (
+                row.metrics.average_cpc
+                / 1_000_000
+            )
+
+            conversion_rate = (
+                safe_float(
+                    row.metrics
+                    .conversions_from_interactions_rate
+                )
+                * 100
+            )
+
+            daily_budget = (
+                row.campaign_budget.amount_micros
+                / 1_000_000
             )
 
             cpa = (
@@ -2139,6 +2175,16 @@ def campaign_performance(
                         row.campaign.status
                     ),
 
+                    "channel_type": enum_name(
+                        row.campaign
+                        .advertising_channel_type
+                    ),
+
+                    "daily_budget": round(
+                        daily_budget,
+                        2,
+                    ),
+
                     "impressions": (
                         row.metrics.impressions
                     ),
@@ -2147,11 +2193,16 @@ def campaign_performance(
                         row.metrics.clicks
                     ),
 
-                    "ctr": round(
+                    "ctr_percent": round(
                         safe_float(
                             row.metrics.ctr
                         )
                         * 100,
+                        2,
+                    ),
+
+                    "average_cpc": round(
+                        average_cpc,
                         2,
                     ),
 
@@ -2162,6 +2213,11 @@ def campaign_performance(
 
                     "conversions": round(
                         conversions,
+                        2,
+                    ),
+
+                    "conversion_rate_percent": round(
+                        conversion_rate,
                         2,
                     ),
 
@@ -2176,36 +2232,75 @@ def campaign_performance(
                 }
             )
 
+        total_cost = round(
+            sum(
+                campaign["cost"]
+                for campaign in data
+            ),
+            2,
+        )
+
+        total_conversions = round(
+            sum(
+                campaign["conversions"]
+                for campaign in data
+            ),
+            2,
+        )
+
+        total_conversion_value = round(
+            sum(
+                campaign["conversion_value"]
+                for campaign in data
+            ),
+            2,
+        )
+
+        account_roas = (
+            round(
+                total_conversion_value
+                / total_cost,
+                2,
+            )
+            if total_cost > 0
+            else None
+        )
+
+        account_cpa = (
+            round(
+                total_cost
+                / total_conversions,
+                2,
+            )
+            if total_conversions > 0
+            else None
+        )
+
         return {
             "status": "SUCCESS",
 
             "customer_id": customer_id,
 
-            "date_range": {
-                "mode": (
-                    date_configuration["mode"]
-                ),
+            "date_range": date_range,
 
-                "period": (
-                    date_configuration["period"]
+            "summary": {
+                "campaigns_count": len(
+                    data
                 ),
-
-                "start_date": (
-                    date_configuration[
-                        "start_date"
-                    ]
+                "total_cost": total_cost,
+                "total_conversions": (
+                    total_conversions
                 ),
-
-                "end_date": (
-                    date_configuration[
-                        "end_date"
-                    ]
+                "total_conversion_value": (
+                    total_conversion_value
+                ),
+                "account_cpa": (
+                    account_cpa
+                ),
+                "account_roas": (
+                    account_roas
                 ),
             },
-
-            "campaigns_count": len(
-                data
-            ),
 
             "campaigns": data,
         }
@@ -2223,13 +2318,16 @@ def campaign_performance(
             "status": "FAILED",
             "error": str(error),
         }
-
 # ============================================================
 # TOP CAMPAGNES
 # ============================================================
 
 @app.get("/top-campaigns")
 def top_campaigns(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
     limit: int = Query(
         default=10,
         ge=1,
@@ -2246,20 +2344,26 @@ def top_campaigns(
     ),
 ):
     performance = campaign_performance(
+        customer_id=customer_id,
         period=period,
         start_date=start_date,
         end_date=end_date,
     )
 
     if (
-        isinstance(performance, dict)
-        and "error" in performance
+        not isinstance(performance, dict)
+        or performance.get("status") != "SUCCESS"
     ):
         return performance
 
+    campaigns = performance.get(
+        "campaigns",
+        [],
+    )
+
     campaigns_with_roas = [
         campaign
-        for campaign in performance
+        for campaign in campaigns
         if campaign.get("roas") is not None
     ]
 
@@ -2269,14 +2373,28 @@ def top_campaigns(
     )
 
     return {
-        "date_range": {
-            "period": period,
-            "start_date": start_date,
-            "end_date": end_date,
-        },
-        "campaigns": campaigns_with_roas[:limit],
-    }
+        "status": "SUCCESS",
 
+        "customer_id": customer_id,
+
+        "date_range": performance.get(
+            "date_range"
+        ),
+
+        "summary": {
+            "total_campaigns": len(
+                campaigns
+            ),
+            "campaigns_with_roas": len(
+                campaigns_with_roas
+            ),
+            "limit": limit,
+        },
+
+        "top_campaigns": (
+            campaigns_with_roas[:limit]
+        ),
+    }
 # ============================================================
 # MOTS-CLÉS
 # ============================================================
