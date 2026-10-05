@@ -4641,6 +4641,26 @@ def search_term_opportunities(
             key=lambda item: (-item["conversions"], -item["roas"]),
         )
 
+        # Retirer les opportunités fortes de la liste générale
+        # pour éviter de présenter deux fois la même action.
+        strong_term_keys = {
+            (
+                item["ad_group_id"],
+                item["normalized_search_term"],
+            )
+            for item in strong_available_terms
+        }
+
+        regular_new_keyword_opportunities = [
+            item
+            for item in new_keyword_opportunities
+            if (
+                item["ad_group_id"],
+                item["normalized_search_term"],
+            )
+            not in strong_term_keys
+        ]
+
         estimated_wasted_cost = round(
             sum(item["cost"] for item in negative_keyword_candidates),
             2,
@@ -4659,10 +4679,11 @@ def search_term_opportunities(
             )
             for item in collection
         }
-        total_recommendations = (
+        total_actionable_opportunities = (
             len(negative_keyword_candidates)
             + len(high_cpa_terms)
-            + len(new_keyword_opportunities)
+            + len(regular_new_keyword_opportunities)
+            + len(strong_available_terms)
             + len(low_ctr_terms)
         )
 
@@ -4756,23 +4777,37 @@ def search_term_opportunities(
             },
             "executive_summary": {
                 "main_risk": main_risk,
+                "main_opportunity": (
+                    strong_available_terms[0]["search_term"]
+                    if strong_available_terms
+                    else None
+                ),
+                "main_opportunity_recommendation": (
+                    strong_available_terms[0]["recommendation"]
+                    if strong_available_terms
+                    else None
+                ),
                 "recommended_first_action": recommended_first_action,
                 "estimated_priority": estimated_priority,
                 "estimated_wasted_cost": estimated_wasted_cost,
             },
             "opportunity_counts": {
                 "unique_opportunity_terms": len(unique_opportunity_terms),
-                "total_recommendations": total_recommendations,
+                "total_recommendations": total_actionable_opportunities,
                 "negative_keyword_candidates": len(negative_keyword_candidates),
                 "high_cpa": len(high_cpa_terms),
-                "new_keyword_opportunities": len(new_keyword_opportunities),
+                "new_keyword_opportunities": len(
+                    regular_new_keyword_opportunities
+                ),
                 "strong_new_keyword_opportunities": len(strong_available_terms),
                 "strong_existing_keywords": len(strong_existing_keywords),
                 "low_ctr_terms": len(low_ctr_terms),
             },
             "negative_keyword_candidates": negative_keyword_candidates[:50],
             "strong_new_keyword_opportunities": strong_available_terms[:50],
-            "new_keyword_opportunities": new_keyword_opportunities[:50],
+            "new_keyword_opportunities": (
+                regular_new_keyword_opportunities[:50]
+            ),
             "strong_existing_keywords": strong_existing_keywords[:50],
             "high_cpa_terms": high_cpa_terms[:50],
             "low_ctr_terms": low_ctr_terms[:50],
@@ -4797,7 +4832,6 @@ def search_term_opportunities(
             "automatic_action": False,
             "error": str(error),
         }
-
 
 # ============================================================ ============================================================ ============================================================ 
 
