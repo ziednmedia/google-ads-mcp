@@ -5,6 +5,7 @@ from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from google.ads.googleads.client import GoogleAdsClient
 
+        
 class BudgetUpdateRequest(
         BaseModel
 ):
@@ -35,6 +36,15 @@ class AddNegativeKeywordRequest(
     match_type: str = "EXACT"
     level: str = "CAMPAIGN"
     ad_group_id: Optional[str] = None
+    confirmation_code: str
+
+class RemoveNegativeKeywordRequest(
+    BaseModel
+):
+    customer_id: str
+    campaign_id: str
+    level: str
+    resource_name: str
     confirmation_code: str
 
 app = FastAPI(
@@ -3564,7 +3574,511 @@ def negative_keywords(
             "automatic_action": False,
             "error": str(error),
         }
+            
+# ============================================================
+# REMOVE NEGATIVE KEYWORD
+# Suppression protégée par code de confirmation
+# Utilise le resource_name exact du critère
+# ============================================================
 
+@app.post("/remove-negative-keyword")
+def remove_negative_keyword(
+    request: RemoveNegativeKeywordRequest
+):
+    try:
+        # ----------------------------------------------------
+        # NORMALISATION
+        # ----------------------------------------------------
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        level = (
+            request.level
+            .strip()
+            .upper()
+        )
+
+        resource_name = (
+            request.resource_name
+            .strip()
+        )
+
+        # ----------------------------------------------------
+        # VALIDATION DU CODE
+        # ----------------------------------------------------
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if not expected_code:
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "CONFIRMATION_CODE is not configured"
+                ),
+                "automatic_action": False,
+            }
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "Confirmation code invalid"
+                ),
+                "automatic_action": False,
+            }
+
+        # ----------------------------------------------------
+        # VALIDATION DES PARAMÈTRES
+        # ----------------------------------------------------
+
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "campaign_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+                "automatic_action": False,
+            }
+
+        valid_levels = {
+            "CAMPAIGN",
+            "AD_GROUP",
+        }
+
+        if level not in valid_levels:
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "level doit être CAMPAIGN "
+                    "ou AD_GROUP."
+                ),
+                "automatic_action": False,
+            }
+
+        if not resource_name:
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "resource_name est obligatoire."
+                ),
+                "automatic_action": False,
+            }
+
+        expected_customer_prefix = (
+            f"customers/{customer_id}/"
+        )
+
+        if not resource_name.startswith(
+            expected_customer_prefix
+        ):
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "Le resource_name n'appartient "
+                    "pas au compte demandé."
+                ),
+                "automatic_action": False,
+            }
+
+        if (
+            level == "CAMPAIGN"
+            and "/campaignCriteria/"
+            not in resource_name
+        ):
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "Le resource_name ne correspond "
+                    "pas à un critère de campagne."
+                ),
+                "automatic_action": False,
+            }
+
+        if (
+            level == "AD_GROUP"
+            and "/adGroupCriteria/"
+            not in resource_name
+        ):
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": (
+                    "Le resource_name ne correspond "
+                    "pas à un critère de groupe "
+                    "d'annonces."
+                ),
+                "automatic_action": False,
+            }
+
+        # ----------------------------------------------------
+        # SERVICES GOOGLE ADS
+        # ----------------------------------------------------
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        # ----------------------------------------------------
+        # VÉRIFIER LA CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.advertising_channel_type
+            FROM campaign
+            WHERE campaign.id = {campaign_id}
+        """
+
+        campaign_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=campaign_query,
+            )
+        )
+
+        campaign_row = next(
+            iter(campaign_response),
+            None
+        )
+
+        if not campaign_row:
+            return {
+                "status": "FAILED",
+                "action": (
+                    "REMOVE_NEGATIVE_KEYWORD"
+                ),
+                "error": "Campaign not found",
+                "automatic_action": False,
+            }
+
+        campaign_name = (
+            campaign_row.campaign.name
+        )
+
+        campaign_type = enum_name(
+            campaign_row
+            .campaign
+            .advertising_channel_type
+        )
+
+        keyword = None
+        match_type = None
+        criterion_id = None
+        ad_group_id = None
+        ad_group_name = None
+
+        # ----------------------------------------------------
+        # TROUVER LE CRITÈRE DE CAMPAGNE
+        # ----------------------------------------------------
+
+        if level == "CAMPAIGN":
+            existing_query = f"""
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    campaign_criterion.criterion_id,
+                    campaign_criterion.status,
+                    campaign_criterion.negative,
+                    campaign_criterion.keyword.text,
+                    campaign_criterion.keyword.match_type,
+                    campaign_criterion.resource_name
+                FROM campaign_criterion
+                WHERE campaign.id = {campaign_id}
+                  AND campaign_criterion.type = 'KEYWORD'
+                  AND campaign_criterion.negative = TRUE
+            """
+
+            existing_response = (
+                google_ads_service.search(
+                    customer_id=customer_id,
+                    query=existing_query,
+                )
+            )
+
+            matching_row = None
+
+            for row in existing_response:
+                if (
+                    row.campaign_criterion
+                    .resource_name
+                    == resource_name
+                ):
+                    matching_row = row
+                    break
+
+            if not matching_row:
+                return {
+                    "status": "NO_CHANGE",
+                    "action": (
+                        "REMOVE_NEGATIVE_KEYWORD"
+                    ),
+                    "message": (
+                        "Le mot-clé négatif demandé "
+                        "n'existe plus au niveau campagne."
+                    ),
+                    "customer_id": customer_id,
+                    "campaign_id": campaign_id,
+                    "campaign_name": campaign_name,
+                    "level": level,
+                    "resource_name": (
+                        resource_name
+                    ),
+                    "already_removed": True,
+                    "automatic_action": False,
+                }
+
+            keyword = (
+                matching_row
+                .campaign_criterion
+                .keyword
+                .text
+            )
+
+            match_type = enum_name(
+                matching_row
+                .campaign_criterion
+                .keyword
+                .match_type
+            )
+
+            criterion_id = str(
+                matching_row
+                .campaign_criterion
+                .criterion_id
+            )
+
+            # ------------------------------------------------
+            # SUPPRESSION AU NIVEAU CAMPAGNE
+            # ------------------------------------------------
+
+            campaign_criterion_service = (
+                client.get_service(
+                    "CampaignCriterionService"
+                )
+            )
+
+            operation = client.get_type(
+                "CampaignCriterionOperation"
+            )
+
+            operation.remove = resource_name
+
+            result = (
+                campaign_criterion_service
+                .mutate_campaign_criteria(
+                    customer_id=customer_id,
+                    operations=[operation],
+                )
+            )
+
+            removed_resource_name = (
+                result.results[0]
+                .resource_name
+            )
+
+        # ----------------------------------------------------
+        # TROUVER LE CRITÈRE DU GROUPE D'ANNONCES
+        # ----------------------------------------------------
+
+        else:
+            existing_query = f"""
+                SELECT
+                    campaign.id,
+                    campaign.name,
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group.status,
+                    ad_group_criterion.criterion_id,
+                    ad_group_criterion.status,
+                    ad_group_criterion.negative,
+                    ad_group_criterion.keyword.text,
+                    ad_group_criterion.keyword.match_type,
+                    ad_group_criterion.resource_name
+                FROM ad_group_criterion
+                WHERE campaign.id = {campaign_id}
+                  AND ad_group_criterion.type = 'KEYWORD'
+                  AND ad_group_criterion.negative = TRUE
+            """
+
+            existing_response = (
+                google_ads_service.search(
+                    customer_id=customer_id,
+                    query=existing_query,
+                )
+            )
+
+            matching_row = None
+
+            for row in existing_response:
+                if (
+                    row.ad_group_criterion
+                    .resource_name
+                    == resource_name
+                ):
+                    matching_row = row
+                    break
+
+            if not matching_row:
+                return {
+                    "status": "NO_CHANGE",
+                    "action": (
+                        "REMOVE_NEGATIVE_KEYWORD"
+                    ),
+                    "message": (
+                        "Le mot-clé négatif demandé "
+                        "n'existe plus au niveau du "
+                        "groupe d'annonces."
+                    ),
+                    "customer_id": customer_id,
+                    "campaign_id": campaign_id,
+                    "campaign_name": campaign_name,
+                    "level": level,
+                    "resource_name": (
+                        resource_name
+                    ),
+                    "already_removed": True,
+                    "automatic_action": False,
+                }
+
+            keyword = (
+                matching_row
+                .ad_group_criterion
+                .keyword
+                .text
+            )
+
+            match_type = enum_name(
+                matching_row
+                .ad_group_criterion
+                .keyword
+                .match_type
+            )
+
+            criterion_id = str(
+                matching_row
+                .ad_group_criterion
+                .criterion_id
+            )
+
+            ad_group_id = str(
+                matching_row
+                .ad_group
+                .id
+            )
+
+            ad_group_name = (
+                matching_row
+                .ad_group
+                .name
+            )
+
+            # ------------------------------------------------
+            # SUPPRESSION AU NIVEAU GROUPE
+            # ------------------------------------------------
+
+            ad_group_criterion_service = (
+                client.get_service(
+                    "AdGroupCriterionService"
+                )
+            )
+
+            operation = client.get_type(
+                "AdGroupCriterionOperation"
+            )
+
+            operation.remove = resource_name
+
+            result = (
+                ad_group_criterion_service
+                .mutate_ad_group_criteria(
+                    customer_id=customer_id,
+                    operations=[operation],
+                )
+            )
+
+            removed_resource_name = (
+                result.results[0]
+                .resource_name
+            )
+
+        # ----------------------------------------------------
+        # SUCCÈS
+        # ----------------------------------------------------
+
+        return {
+            "status": "SUCCESS",
+            "action": (
+                "REMOVE_NEGATIVE_KEYWORD"
+            ),
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "campaign_name": campaign_name,
+            "campaign_type": campaign_type,
+            "level": level,
+            "ad_group_id": ad_group_id,
+            "ad_group_name": ad_group_name,
+            "criterion_id": criterion_id,
+            "keyword": keyword,
+            "match_type": match_type,
+            "resource_name": (
+                removed_resource_name
+            ),
+            "negative_keyword_removed": True,
+            "automatic_action": False,
+            "human_confirmation_validated": True,
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "action": (
+                "REMOVE_NEGATIVE_KEYWORD"
+            ),
+            "automatic_action": False,
+            "error": str(error),
+        }
 # ============================================================
 # ADD NEGATIVE KEYWORD
 # Modification protégée par code de confirmation
