@@ -47,6 +47,17 @@ class RemoveNegativeKeywordRequest(
     resource_name: str
     confirmation_code: str
 
+class AddKeywordRequest(
+    BaseModel
+):
+    customer_id: str
+    campaign_id: str
+    ad_group_id: str
+    keyword: str
+    match_type: str = "EXACT"
+    confirmation_code: str
+
+
 app = FastAPI(
     title="Google Ads Optimization API",
     version="1.0.0",
@@ -2139,9 +2150,7 @@ customer_id: str
     except Exception as error:
         return {"error": str(error)}
 
-# ============================================================
-# SEARCH TERMES
-# ============================================================
+
 # ============================================================
 # SEARCH TERMS
 # ============================================================
@@ -4639,6 +4648,600 @@ def add_negative_keyword(
         return {
             "status": "FAILED",
             "action": "ADD_NEGATIVE_KEYWORD",
+            "automatic_action": False,
+            "error": str(error),
+        }
+
+# ============================================================
+# ADD KEYWORD
+# Ajout d'un mot-clé positif dans un groupe d'annonces
+# Modification protégée par code de confirmation
+# ============================================================
+
+@app.post("/add-keyword")
+def add_keyword(
+    request: AddKeywordRequest
+):
+    try:
+        # ----------------------------------------------------
+        # NORMALISATION
+        # ----------------------------------------------------
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        keyword = request.keyword.strip()
+
+        normalized_keyword = (
+            normalize_keyword_text(
+                keyword
+            )
+        )
+
+        match_type = (
+            request.match_type
+            .strip()
+            .upper()
+        )
+
+        # ----------------------------------------------------
+        # VALIDATION DU CODE DE CONFIRMATION
+        # ----------------------------------------------------
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if not expected_code:
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "CONFIRMATION_CODE is not configured"
+                ),
+                "automatic_action": False,
+            }
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "Confirmation code invalid"
+                ),
+                "automatic_action": False,
+            }
+
+        # ----------------------------------------------------
+        # VALIDATION DES PARAMÈTRES
+        # ----------------------------------------------------
+
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "campaign_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+                "automatic_action": False,
+            }
+
+        if not ad_group_id.isdigit():
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "ad_group_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+                "automatic_action": False,
+            }
+
+        if not keyword:
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "Le mot-clé ne peut pas être vide."
+                ),
+                "automatic_action": False,
+            }
+
+        if len(keyword) > 80:
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "Le mot-clé dépasse la longueur "
+                    "autorisée."
+                ),
+                "automatic_action": False,
+            }
+
+        valid_match_types = {
+            "EXACT",
+            "PHRASE",
+            "BROAD",
+        }
+
+        if match_type not in valid_match_types:
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "match_type doit être EXACT, "
+                    "PHRASE ou BROAD."
+                ),
+                "automatic_action": False,
+            }
+
+        # ----------------------------------------------------
+        # SERVICES GOOGLE ADS
+        # ----------------------------------------------------
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        # ----------------------------------------------------
+        # VÉRIFIER LA CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.advertising_channel_type
+            FROM campaign
+            WHERE campaign.id = {campaign_id}
+        """
+
+        campaign_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=campaign_query,
+            )
+        )
+
+        campaign_row = next(
+            iter(campaign_response),
+            None
+        )
+
+        if not campaign_row:
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": "Campaign not found",
+                "automatic_action": False,
+            }
+
+        campaign_name = (
+            campaign_row.campaign.name
+        )
+
+        campaign_status = enum_name(
+            campaign_row.campaign.status
+        )
+
+        campaign_type = enum_name(
+            campaign_row
+            .campaign
+            .advertising_channel_type
+        )
+
+        # ----------------------------------------------------
+        # VÉRIFIER LE GROUPE D'ANNONCES
+        # ----------------------------------------------------
+
+        ad_group_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group.status,
+                ad_group.type,
+                ad_group.resource_name
+            FROM ad_group
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+        """
+
+        ad_group_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=ad_group_query,
+            )
+        )
+
+        ad_group_row = next(
+            iter(ad_group_response),
+            None
+        )
+
+        if not ad_group_row:
+            return {
+                "status": "FAILED",
+                "action": "ADD_KEYWORD",
+                "error": (
+                    "Ad group not found in this campaign"
+                ),
+                "automatic_action": False,
+            }
+
+        ad_group_name = (
+            ad_group_row.ad_group.name
+        )
+
+        ad_group_status = enum_name(
+            ad_group_row.ad_group.status
+        )
+
+        # ----------------------------------------------------
+        # VÉRIFIER LES MOTS-CLÉS POSITIFS EXISTANTS
+        # ----------------------------------------------------
+
+        existing_keyword_query = f"""
+            SELECT
+                campaign.id,
+                ad_group.id,
+                ad_group.name,
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.status,
+                ad_group_criterion.negative,
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type,
+                ad_group_criterion.resource_name
+            FROM ad_group_criterion
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_criterion.type = 'KEYWORD'
+              AND ad_group_criterion.negative = FALSE
+        """
+
+        existing_keyword_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=existing_keyword_query,
+            )
+        )
+
+        for row in existing_keyword_response:
+            existing_keyword = (
+                row.ad_group_criterion
+                .keyword
+                .text
+            )
+
+            existing_match_type = enum_name(
+                row.ad_group_criterion
+                .keyword
+                .match_type
+            )
+
+            if (
+                normalize_keyword_text(
+                    existing_keyword
+                )
+                == normalized_keyword
+                and existing_match_type
+                == match_type
+            ):
+                return {
+                    "status": "NO_CHANGE",
+                    "action": "ADD_KEYWORD",
+                    "message": (
+                        "Ce mot-clé existe déjà dans "
+                        "le groupe d'annonces avec le "
+                        "même type de correspondance."
+                    ),
+                    "customer_id": customer_id,
+                    "campaign_id": campaign_id,
+                    "campaign_name": campaign_name,
+                    "ad_group_id": ad_group_id,
+                    "ad_group_name": ad_group_name,
+                    "keyword": keyword,
+                    "match_type": match_type,
+                    "keyword_status": enum_name(
+                        row.ad_group_criterion
+                        .status
+                    ),
+                    "criterion_id": str(
+                        row.ad_group_criterion
+                        .criterion_id
+                    ),
+                    "resource_name": (
+                        row.ad_group_criterion
+                        .resource_name
+                    ),
+                    "already_exists": True,
+                    "automatic_action": False,
+                }
+
+        # ----------------------------------------------------
+        # VÉRIFIER LES NÉGATIFS AU NIVEAU CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_negative_query = f"""
+            SELECT
+                campaign_criterion.criterion_id,
+                campaign_criterion.keyword.text,
+                campaign_criterion.keyword.match_type,
+                campaign_criterion.resource_name
+            FROM campaign_criterion
+            WHERE campaign.id = {campaign_id}
+              AND campaign_criterion.type = 'KEYWORD'
+              AND campaign_criterion.negative = TRUE
+        """
+
+        campaign_negative_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=campaign_negative_query,
+            )
+        )
+
+        campaign_conflicts = []
+
+        for row in campaign_negative_response:
+            negative_keyword = (
+                row.campaign_criterion
+                .keyword
+                .text
+            )
+
+            negative_match_type = enum_name(
+                row.campaign_criterion
+                .keyword
+                .match_type
+            )
+
+            if (
+                normalize_keyword_text(
+                    negative_keyword
+                )
+                == normalized_keyword
+            ):
+                campaign_conflicts.append(
+                    {
+                        "level": "CAMPAIGN",
+                        "keyword": negative_keyword,
+                        "match_type": (
+                            negative_match_type
+                        ),
+                        "criterion_id": str(
+                            row.campaign_criterion
+                            .criterion_id
+                        ),
+                        "resource_name": (
+                            row.campaign_criterion
+                            .resource_name
+                        ),
+                    }
+                )
+
+        # ----------------------------------------------------
+        # VÉRIFIER LES NÉGATIFS AU NIVEAU GROUPE
+        # ----------------------------------------------------
+
+        ad_group_negative_query = f"""
+            SELECT
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type,
+                ad_group_criterion.resource_name
+            FROM ad_group_criterion
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_criterion.type = 'KEYWORD'
+              AND ad_group_criterion.negative = TRUE
+        """
+
+        ad_group_negative_response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=ad_group_negative_query,
+            )
+        )
+
+        ad_group_conflicts = []
+
+        for row in ad_group_negative_response:
+            negative_keyword = (
+                row.ad_group_criterion
+                .keyword
+                .text
+            )
+
+            negative_match_type = enum_name(
+                row.ad_group_criterion
+                .keyword
+                .match_type
+            )
+
+            if (
+                normalize_keyword_text(
+                    negative_keyword
+                )
+                == normalized_keyword
+            ):
+                ad_group_conflicts.append(
+                    {
+                        "level": "AD_GROUP",
+                        "keyword": negative_keyword,
+                        "match_type": (
+                            negative_match_type
+                        ),
+                        "criterion_id": str(
+                            row.ad_group_criterion
+                            .criterion_id
+                        ),
+                        "resource_name": (
+                            row.ad_group_criterion
+                            .resource_name
+                        ),
+                    }
+                )
+
+        negative_conflicts = (
+            campaign_conflicts
+            + ad_group_conflicts
+        )
+
+        if negative_conflicts:
+            return {
+                "status": "BLOCKED",
+                "action": "ADD_KEYWORD",
+                "message": (
+                    "Ce terme correspond déjà à un "
+                    "mot-clé négatif. Retirer ou réviser "
+                    "l'exclusion avant de créer le "
+                    "mot-clé positif."
+                ),
+                "customer_id": customer_id,
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
+                "ad_group_id": ad_group_id,
+                "ad_group_name": ad_group_name,
+                "keyword": keyword,
+                "match_type": match_type,
+                "negative_conflicts": (
+                    negative_conflicts
+                ),
+                "automatic_action": False,
+            }
+
+        # ----------------------------------------------------
+        # MAPPER LE TYPE DE CORRESPONDANCE
+        # ----------------------------------------------------
+
+        match_type_enum = {
+            "EXACT": (
+                client.enums
+                .KeywordMatchTypeEnum
+                .EXACT
+            ),
+            "PHRASE": (
+                client.enums
+                .KeywordMatchTypeEnum
+                .PHRASE
+            ),
+            "BROAD": (
+                client.enums
+                .KeywordMatchTypeEnum
+                .BROAD
+            ),
+        }[match_type]
+
+        # ----------------------------------------------------
+        # CRÉER LE MOT-CLÉ
+        # ----------------------------------------------------
+
+        ad_group_criterion_service = (
+            client.get_service(
+                "AdGroupCriterionService"
+            )
+        )
+
+        operation = client.get_type(
+            "AdGroupCriterionOperation"
+        )
+
+        criterion = operation.create
+
+        criterion.ad_group = (
+            ad_group_row.ad_group.resource_name
+        )
+
+        criterion.status = (
+            client.enums
+            .AdGroupCriterionStatusEnum
+            .ENABLED
+        )
+
+        criterion.negative = False
+
+        criterion.keyword.text = keyword
+
+        criterion.keyword.match_type = (
+            match_type_enum
+        )
+
+        result = (
+            ad_group_criterion_service
+            .mutate_ad_group_criteria(
+                customer_id=customer_id,
+                operations=[operation],
+            )
+        )
+
+        resource_name = (
+            result.results[0]
+            .resource_name
+        )
+
+        # ----------------------------------------------------
+        # SUCCÈS
+        # ----------------------------------------------------
+
+        return {
+            "status": "SUCCESS",
+            "action": "ADD_KEYWORD",
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "campaign_name": campaign_name,
+            "campaign_status": campaign_status,
+            "campaign_type": campaign_type,
+            "ad_group_id": ad_group_id,
+            "ad_group_name": ad_group_name,
+            "ad_group_status": (
+                ad_group_status
+            ),
+            "keyword": keyword,
+            "normalized_keyword": (
+                normalized_keyword
+            ),
+            "match_type": match_type,
+            "keyword_status": "ENABLED",
+            "negative": False,
+            "already_exists": False,
+            "resource_name": resource_name,
+            "automatic_action": False,
+            "human_confirmation_validated": True,
+            "delivery_notice": (
+                "Le mot-clé est activé, mais sa "
+                "diffusion dépend aussi du statut "
+                "de la campagne, du groupe "
+                "d'annonces et de l'admissibilité "
+                "Google Ads."
+            ),
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "action": "ADD_KEYWORD",
             "automatic_action": False,
             "error": str(error),
         }
