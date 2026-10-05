@@ -3925,7 +3925,125 @@ def search_terms(
                         2,
                     ),
 
-      
+                    "conversion_rate_percent": round(
+                        conversion_rate,
+                        2,
+                    ),
+
+                    "conversion_value": round(
+                        conversion_value,
+                        2,
+                    ),
+
+                    "cpa": (
+                        round(cpa, 2)
+                        if cpa is not None
+                        else None
+                    ),
+
+                    "roas": (
+                        round(roas, 2)
+                        if roas is not None
+                        else None
+                    ),
+                }
+            )
+
+        results.sort(
+            key=lambda item: item["cost"],
+            reverse=True,
+        )
+
+        total_cost = round(
+            sum(
+                item["cost"]
+                for item in results
+            ),
+            2,
+        )
+
+        total_conversions = round(
+            sum(
+                item["conversions"]
+                for item in results
+            ),
+            2,
+        )
+
+        total_conversion_value = round(
+            sum(
+                item["conversion_value"]
+                for item in results
+            ),
+            2,
+        )
+
+        account_roas = (
+            round(
+                total_conversion_value
+                / total_cost,
+                2,
+            )
+            if total_cost > 0
+            else None
+        )
+
+        account_cpa = (
+            round(
+                total_cost
+                / total_conversions,
+                2,
+            )
+            if total_conversions > 0
+            else None
+        )
+
+        return {
+            "status": "SUCCESS",
+
+            "customer_id": customer_id,
+
+            "campaign_id": campaign_id,
+
+            "campaign_name": campaign_name,
+
+            "date_range": date_range,
+
+            "summary": {
+                "search_terms_count": len(
+                    results
+                ),
+                "total_cost": total_cost,
+                "total_conversions": (
+                    total_conversions
+                ),
+                "total_conversion_value": (
+                    total_conversion_value
+                ),
+                "account_cpa": (
+                    account_cpa
+                ),
+                "account_roas": (
+                    account_roas
+                ),
+            },
+
+            "search_terms": results,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
 # ============================================================
 # SEARCH TERM OPPORTUNITIES V2
 # Analyse en lecture seule des termes de recherche
