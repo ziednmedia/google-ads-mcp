@@ -8627,6 +8627,1031 @@ customer_id: str
         return {"error": str(error)}
 
 # ============================================================
+# ACCOUNT INSIGHTS
+# Vue consolidée en lecture seule d'une campagne Google Ads
+# AUCUNE modification automatique
+#
+# Dépendances attendues dans main.py :
+# - Query, Optional
+# - normalize_customer_id
+# - campaign_performance
+# - ad_groups
+# - ads
+# - keywords
+# - search_terms
+# - search_term_opportunities
+# - device_opportunities
+# - network_opportunities
+# ============================================================
+
+
+def _account_insights_safe_call(
+    audit_name: str,
+    function,
+    **kwargs,
+):
+    """Exécute un audit sans faire échouer tout le rapport."""
+
+    try:
+        result = function(**kwargs)
+
+        if not isinstance(result, dict):
+            return {
+                "audit": audit_name,
+                "status": "FAILED",
+                "data": None,
+                "error": (
+                    "La fonction appelée n'a pas retourné "
+                    "un dictionnaire JSON."
+                ),
+            }
+
+        result_status = result.get(
+            "status",
+            "SUCCESS",
+        )
+
+        if result_status in {
+            "FAILED",
+            "ERROR",
+        }:
+            return {
+                "audit": audit_name,
+                "status": "FAILED",
+                "data": result,
+                "error": result.get(
+                    "error",
+                    "Erreur non précisée.",
+                ),
+            }
+
+        if result_status == "NO_DATA":
+            return {
+                "audit": audit_name,
+                "status": "NO_DATA",
+                "data": result,
+                "error": None,
+            }
+
+        return {
+            "audit": audit_name,
+            "status": "SUCCESS",
+            "data": result,
+            "error": None,
+        }
+
+    except Exception as error:
+        return {
+            "audit": audit_name,
+            "status": "FAILED",
+            "data": None,
+            "error": str(error),
+        }
+
+
+def _account_insights_best_item(
+    items: list,
+    metric: str,
+    reverse: bool = True,
+    minimum_clicks: int = 0,
+):
+    """Retourne le meilleur élément admissible selon une métrique."""
+
+    eligible_items = [
+        item
+        for item in items
+        if (
+            item.get(metric) is not None
+            and item.get("clicks", 0)
+            >= minimum_clicks
+        )
+    ]
+
+    if not eligible_items:
+        return None
+
+    return sorted(
+        eligible_items,
+        key=lambda item: item[metric],
+        reverse=reverse,
+    )[0]
+
+
+def _account_insights_health_label(
+    score: int,
+):
+    """Convertit le score numérique en libellé lisible."""
+
+    if score >= 90:
+        return "EXCELLENT"
+
+    if score >= 75:
+        return "GOOD"
+
+    if score >= 60:
+        return "NEEDS_ATTENTION"
+
+    return "AT_RISK"
+
+
+# ============================================================
+# ACCOUNT INSIGHTS ENDPOINT
+# ============================================================
+
+@app.get("/account-insights")
+def account_insights(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description=(
+            "ID de la campagne Google Ads à analyser"
+        ),
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie. "
+            "LAST_30_DAYS par défaut."
+        ),
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de début personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de fin personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
+    minimum_clicks_for_ranking: int = Query(
+        default=5,
+        ge=1,
+        le=100000,
+        description=(
+            "Nombre minimum de clics pour "
+            "les classements internes."
+        ),
+    ),
+):
+    try:
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "automatic_action": False,
+                "error": (
+                    "campaign_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+            }
+
+        shared_parameters = {
+            "customer_id": customer_id,
+            "period": period,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+
+        campaign_parameters = {
+            **shared_parameters,
+            "campaign_id": campaign_id,
+        }
+
+        # ----------------------------------------------------
+        # EXÉCUTION DES AUDITS
+        # Chaque appel est isolé pour produire un rapport partiel
+        # si une source échoue.
+        # ----------------------------------------------------
+
+        campaign_audit = (
+            _account_insights_safe_call(
+                "campaign_performance",
+                campaign_performance,
+                **shared_parameters,
+            )
+        )
+
+        ad_group_audit = (
+            _account_insights_safe_call(
+                "ad_groups",
+                ad_groups,
+                **campaign_parameters,
+            )
+        )
+
+        ads_audit = (
+            _account_insights_safe_call(
+                "ads",
+                ads,
+                **shared_parameters,
+            )
+        )
+
+        keywords_audit = (
+            _account_insights_safe_call(
+                "keywords",
+                keywords,
+                **shared_parameters,
+            )
+        )
+
+        search_terms_audit = (
+            _account_insights_safe_call(
+                "search_terms",
+                search_terms,
+                **campaign_parameters,
+            )
+        )
+
+        search_opportunities_audit = (
+            _account_insights_safe_call(
+                "search_term_opportunities",
+                search_term_opportunities,
+                **campaign_parameters,
+            )
+        )
+
+        device_audit = (
+            _account_insights_safe_call(
+                "device_opportunities",
+                device_opportunities,
+                **campaign_parameters,
+            )
+        )
+
+        network_audit = (
+            _account_insights_safe_call(
+                "network_opportunities",
+                network_opportunities,
+                **campaign_parameters,
+            )
+        )
+
+        audits = [
+            campaign_audit,
+            ad_group_audit,
+            ads_audit,
+            keywords_audit,
+            search_terms_audit,
+            search_opportunities_audit,
+            device_audit,
+            network_audit,
+        ]
+
+        # ----------------------------------------------------
+        # EXTRACTION ET FILTRAGE DE LA CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_data = (
+            campaign_audit.get("data")
+            or {}
+        )
+
+        all_campaigns = campaign_data.get(
+            "campaigns",
+            [],
+        )
+
+        selected_campaign = next(
+            (
+                item
+                for item in all_campaigns
+                if str(item.get("campaign_id"))
+                == campaign_id
+            ),
+            None,
+        )
+
+        ad_group_data = (
+            ad_group_audit.get("data")
+            or {}
+        )
+
+        campaign_ad_groups = (
+            ad_group_data.get(
+                "ad_groups",
+                [],
+            )
+        )
+
+        ads_data = (
+            ads_audit.get("data")
+            or {}
+        )
+
+        campaign_ads = [
+            item
+            for item in ads_data.get(
+                "ads",
+                [],
+            )
+            if str(item.get("campaign_id"))
+            == campaign_id
+        ]
+
+        keywords_data = (
+            keywords_audit.get("data")
+            or {}
+        )
+
+        campaign_keywords = [
+            item
+            for item in keywords_data.get(
+                "keywords",
+                [],
+            )
+            if str(item.get("campaign_id"))
+            == campaign_id
+        ]
+
+        search_terms_data = (
+            search_terms_audit.get("data")
+            or {}
+        )
+
+        campaign_search_terms = (
+            search_terms_data.get(
+                "search_terms",
+                [],
+            )
+        )
+
+        search_opportunities_data = (
+            search_opportunities_audit.get(
+                "data"
+            )
+            or {}
+        )
+
+        device_data = (
+            device_audit.get("data")
+            or {}
+        )
+
+        network_data = (
+            network_audit.get("data")
+            or {}
+        )
+
+        if (
+            selected_campaign is None
+            and not campaign_ad_groups
+            and not campaign_ads
+            and not campaign_keywords
+            and not campaign_search_terms
+        ):
+            return {
+                "status": "NO_DATA",
+                "mode": "READ_ONLY_INSIGHTS",
+                "automatic_action": False,
+                "requires_human_confirmation": True,
+                "customer_id": customer_id,
+                "campaign_id": campaign_id,
+                "date_range": campaign_data.get(
+                    "date_range"
+                ),
+                "message": (
+                    "Aucune donnée exploitable n'a été "
+                    "retournée pour cette campagne et "
+                    "cette période."
+                ),
+                "audit_coverage": {
+                    item["audit"]: item["status"]
+                    for item in audits
+                },
+            }
+
+        # ----------------------------------------------------
+        # CLASSEMENTS
+        # ----------------------------------------------------
+
+        best_ad_group_by_roas = (
+            _account_insights_best_item(
+                campaign_ad_groups,
+                "roas",
+                reverse=True,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_ad_group_by_cpa = (
+            _account_insights_best_item(
+                campaign_ad_groups,
+                "cpa",
+                reverse=False,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_ad_by_roas = (
+            _account_insights_best_item(
+                campaign_ads,
+                "roas",
+                reverse=True,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_ad_by_cpa = (
+            _account_insights_best_item(
+                campaign_ads,
+                "cpa",
+                reverse=False,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_keyword_by_roas = (
+            _account_insights_best_item(
+                campaign_keywords,
+                "roas",
+                reverse=True,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_keyword_by_cpa = (
+            _account_insights_best_item(
+                campaign_keywords,
+                "cpa",
+                reverse=False,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_search_term_by_roas = (
+            _account_insights_best_item(
+                campaign_search_terms,
+                "roas",
+                reverse=True,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_search_term_by_cpa = (
+            _account_insights_best_item(
+                campaign_search_terms,
+                "cpa",
+                reverse=False,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        device_performance_data = (
+            device_data.get(
+                "device_performance",
+                [],
+            )
+        )
+
+        network_performance_data = (
+            network_data.get(
+                "network_performance",
+                [],
+            )
+        )
+
+        best_device = (
+            _account_insights_best_item(
+                device_performance_data,
+                "roas",
+                reverse=True,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        best_network = (
+            _account_insights_best_item(
+                network_performance_data,
+                "roas",
+                reverse=True,
+                minimum_clicks=(
+                    minimum_clicks_for_ranking
+                ),
+            )
+        )
+
+        # ----------------------------------------------------
+        # RISQUES ET OPPORTUNITÉS CONSOLIDÉS
+        # ----------------------------------------------------
+
+        consolidated_risks = []
+        consolidated_opportunities = []
+
+        search_summary = (
+            search_opportunities_data.get(
+                "executive_summary",
+                {},
+            )
+        )
+
+        search_priority = search_summary.get(
+            "estimated_priority"
+        )
+
+        if (
+            search_summary.get("main_risk")
+            and search_priority
+            in {"HIGH", "MEDIUM"}
+        ):
+            consolidated_risks.append(
+                {
+                    "source": (
+                        "SEARCH_TERMS"
+                    ),
+                    "priority": search_priority,
+                    "risk": search_summary.get(
+                        "main_risk"
+                    ),
+                    "recommended_action": (
+                        search_summary.get(
+                            "recommended_first_action"
+                        )
+                    ),
+                    "estimated_wasted_cost": (
+                        search_summary.get(
+                            "estimated_wasted_cost",
+                            0,
+                        )
+                    ),
+                }
+            )
+
+        if search_summary.get(
+            "main_opportunity"
+        ):
+            consolidated_opportunities.append(
+                {
+                    "source": (
+                        "SEARCH_TERMS"
+                    ),
+                    "priority": "HIGH",
+                    "opportunity": (
+                        search_summary.get(
+                            "main_opportunity"
+                        )
+                    ),
+                    "recommendation": (
+                        search_summary.get(
+                            "main_opportunity_recommendation"
+                        )
+                    ),
+                }
+            )
+
+        device_summary = device_data.get(
+            "executive_summary",
+            {},
+        )
+
+        device_priority = device_summary.get(
+            "estimated_priority"
+        )
+
+        if (
+            device_summary.get("main_risk")
+            and device_priority
+            in {"HIGH", "MEDIUM"}
+        ):
+            consolidated_risks.append(
+                {
+                    "source": "DEVICE",
+                    "priority": device_priority,
+                    "risk": device_summary.get(
+                        "main_risk"
+                    ),
+                    "recommended_action": (
+                        device_summary.get(
+                            "recommended_first_action"
+                        )
+                    ),
+                    "estimated_wasted_cost": (
+                        device_summary.get(
+                            "estimated_wasted_cost",
+                            0,
+                        )
+                    ),
+                }
+            )
+
+        if device_summary.get(
+            "main_opportunity"
+        ):
+            consolidated_opportunities.append(
+                {
+                    "source": "DEVICE",
+                    "priority": "INFO",
+                    "opportunity": (
+                        device_summary.get(
+                            "main_opportunity"
+                        )
+                    ),
+                    "recommendation": (
+                        device_summary.get(
+                            "main_opportunity_recommendation"
+                        )
+                    ),
+                }
+            )
+
+        network_summary = network_data.get(
+            "executive_summary",
+            {},
+        )
+
+        network_priority = network_summary.get(
+            "estimated_priority"
+        )
+
+        if (
+            network_summary.get("main_risk")
+            and network_priority
+            in {"HIGH", "MEDIUM"}
+        ):
+            consolidated_risks.append(
+                {
+                    "source": "NETWORK",
+                    "priority": (
+                        network_priority
+                    ),
+                    "risk": network_summary.get(
+                        "main_risk"
+                    ),
+                    "recommended_action": (
+                        network_summary.get(
+                            "recommended_first_action"
+                        )
+                    ),
+                    "estimated_wasted_cost": (
+                        network_summary.get(
+                            "estimated_wasted_cost",
+                            0,
+                        )
+                    ),
+                }
+            )
+
+        if network_summary.get(
+            "main_opportunity"
+        ):
+            consolidated_opportunities.append(
+                {
+                    "source": "NETWORK",
+                    "priority": "INFO",
+                    "opportunity": (
+                        network_summary.get(
+                            "main_opportunity"
+                        )
+                    ),
+                    "recommendation": (
+                        network_summary.get(
+                            "main_opportunity_recommendation"
+                        )
+                    ),
+                }
+            )
+
+        priority_order = {
+            "HIGH": 0,
+            "MEDIUM": 1,
+            "LOW": 2,
+            "INFO": 3,
+        }
+
+        consolidated_risks.sort(
+            key=lambda item: (
+                priority_order.get(
+                    item["priority"],
+                    99,
+                ),
+                -safe_float(
+                    item.get(
+                        "estimated_wasted_cost",
+                        0,
+                    )
+                ),
+            )
+        )
+
+        consolidated_opportunities.sort(
+            key=lambda item: (
+                priority_order.get(
+                    item["priority"],
+                    99,
+                )
+            )
+        )
+
+        biggest_risk = (
+            consolidated_risks[0]
+            if consolidated_risks
+            else None
+        )
+
+        biggest_opportunity = (
+            consolidated_opportunities[0]
+            if consolidated_opportunities
+            else None
+        )
+
+        # ----------------------------------------------------
+        # SCORE DE SANTÉ TRANSPARENT ET DÉTERMINISTE
+        # Le score est un indicateur interne suggéré, pas une
+        # métrique officielle de Google Ads.
+        # ----------------------------------------------------
+
+        health_score = 100
+        score_adjustments = []
+
+        for risk in consolidated_risks:
+            if risk["priority"] == "HIGH":
+                deduction = 15
+            elif risk["priority"] == "MEDIUM":
+                deduction = 7
+            else:
+                deduction = 2
+
+            health_score -= deduction
+
+            score_adjustments.append(
+                {
+                    "source": risk["source"],
+                    "priority": risk["priority"],
+                    "adjustment": -deduction,
+                    "reason": risk["risk"],
+                }
+            )
+
+        failed_audits = [
+            item
+            for item in audits
+            if item["status"] == "FAILED"
+        ]
+
+        no_data_audits = [
+            item
+            for item in audits
+            if item["status"] == "NO_DATA"
+        ]
+
+        for failed_audit in failed_audits:
+            health_score -= 3
+            score_adjustments.append(
+                {
+                    "source": (
+                        failed_audit["audit"]
+                    ),
+                    "priority": "INFO",
+                    "adjustment": -3,
+                    "reason": (
+                        "Audit indisponible. Le score "
+                        "est calculé avec une couverture "
+                        "partielle."
+                    ),
+                }
+            )
+
+        health_score = max(
+            0,
+            min(100, health_score),
+        )
+
+        health_label = (
+            _account_insights_health_label(
+                health_score
+            )
+        )
+
+        # ----------------------------------------------------
+        # COUVERTURE
+        # ----------------------------------------------------
+
+        audit_coverage = {
+            item["audit"]: item["status"]
+            for item in audits
+        }
+
+        audit_errors = [
+            {
+                "audit": item["audit"],
+                "error": item["error"],
+            }
+            for item in failed_audits
+        ]
+
+        successful_audits = sum(
+            1
+            for item in audits
+            if item["status"] == "SUCCESS"
+        )
+
+        # ----------------------------------------------------
+        # RÉPONSE
+        # ----------------------------------------------------
+
+        return {
+            "status": "SUCCESS",
+            "mode": "READ_ONLY_INSIGHTS",
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "campaign_name": (
+                selected_campaign.get(
+                    "campaign_name"
+                )
+                if selected_campaign
+                else (
+                    ad_group_data.get(
+                        "campaign_name"
+                    )
+                    or search_terms_data.get(
+                        "campaign_name"
+                    )
+                )
+            ),
+            "date_range": (
+                campaign_data.get(
+                    "date_range"
+                )
+                or ad_group_data.get(
+                    "date_range"
+                )
+                or search_terms_data.get(
+                    "date_range"
+                )
+            ),
+            "health": {
+                "score": health_score,
+                "label": health_label,
+                "method": (
+                    "Score interne suggéré sur 100. "
+                    "Départ à 100, puis déduction de "
+                    "15 points par risque HIGH, "
+                    "7 par risque MEDIUM, 2 par risque "
+                    "LOW et 3 par audit échoué."
+                ),
+                "score_adjustments": (
+                    score_adjustments
+                ),
+            },
+            "campaign_summary": (
+                selected_campaign
+            ),
+            "entity_counts": {
+                "ad_groups": len(
+                    campaign_ad_groups
+                ),
+                "ads": len(campaign_ads),
+                "keywords": len(
+                    campaign_keywords
+                ),
+                "search_terms": len(
+                    campaign_search_terms
+                ),
+                "devices": len(
+                    device_performance_data
+                ),
+                "networks": len(
+                    network_performance_data
+                ),
+            },
+            "best_performers": {
+                "ad_group_by_roas": (
+                    best_ad_group_by_roas
+                ),
+                "ad_group_by_cpa": (
+                    best_ad_group_by_cpa
+                ),
+                "ad_by_roas": best_ad_by_roas,
+                "ad_by_cpa": best_ad_by_cpa,
+                "keyword_by_roas": (
+                    best_keyword_by_roas
+                ),
+                "keyword_by_cpa": (
+                    best_keyword_by_cpa
+                ),
+                "search_term_by_roas": (
+                    best_search_term_by_roas
+                ),
+                "search_term_by_cpa": (
+                    best_search_term_by_cpa
+                ),
+                "device_by_roas": best_device,
+                "network_by_roas": best_network,
+            },
+            "executive_summary": {
+                "biggest_risk": biggest_risk,
+                "biggest_opportunity": (
+                    biggest_opportunity
+                ),
+                "risks_count": len(
+                    consolidated_risks
+                ),
+                "opportunities_count": len(
+                    consolidated_opportunities
+                ),
+                "estimated_wasted_cost": round(
+                    sum(
+                        safe_float(
+                            item.get(
+                                "estimated_wasted_cost",
+                                0,
+                            )
+                        )
+                        for item
+                        in consolidated_risks
+                    ),
+                    2,
+                ),
+            },
+            "risks": consolidated_risks,
+            "opportunities": (
+                consolidated_opportunities
+            ),
+            "source_summaries": {
+                "search_terms": (
+                    search_summary
+                ),
+                "devices": device_summary,
+                "networks": network_summary,
+            },
+            "audit_summary": {
+                "audits_total": len(audits),
+                "audits_successful": (
+                    successful_audits
+                ),
+                "audits_failed": len(
+                    failed_audits
+                ),
+                "audits_without_data": len(
+                    no_data_audits
+                ),
+            },
+            "audit_coverage": audit_coverage,
+            "audit_errors": audit_errors,
+            "disclaimer": (
+                "Ce rapport agrège des métriques et "
+                "des règles internes en lecture seule. "
+                "Le score de santé n'est pas une métrique "
+                "officielle de Google Ads. Vérifier le "
+                "contexte commercial, la qualité des "
+                "conversions, le volume de données et la "
+                "stratégie d'enchères avant toute action."
+            ),
+        }
+
+    except ValueError as error:
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
+
+
+# ============================================================
 # OPTIMIZATION OPPORTUNITIES
 # Analyse à la demande d'une campagne précise
 # AUCUNE modification automatique
