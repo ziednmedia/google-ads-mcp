@@ -454,13 +454,29 @@ def update_budget(
             "status": "FAILED",
             "error": str(error)
         }
-# ----------------------------------------------------
-# AD GROUPE
-# ----------------------------------------------------
+# ============================================================
+# AD GROUPS
+# ============================================================
+
 @app.get("/ad-groups")
 def ad_groups(
-    customer_id: str,
-    campaign_id: str
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+    ),
 ):
     try:
 
@@ -468,25 +484,72 @@ def ad_groups(
             customer_id
         )
 
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        date_configuration = (
+            build_date_filter(
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
+        date_filter = (
+            date_configuration["filter"]
+        )
+
+        date_range = {
+            "mode": (
+                date_configuration["mode"]
+            ),
+            "period": (
+                date_configuration["period"]
+            ),
+            "start_date": (
+                date_configuration["start_date"]
+            ),
+            "end_date": (
+                date_configuration["end_date"]
+            ),
+        }
+
         client = get_google_ads_client()
 
         query = f"""
             SELECT
                 campaign.id,
                 campaign.name,
+
                 ad_group.id,
                 ad_group.name,
                 ad_group.status,
-                ad_group.type
+                ad_group.type,
+
+                metrics.impressions,
+                metrics.clicks,
+                metrics.ctr,
+                metrics.average_cpc,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value,
+                metrics.conversions_from_interactions_rate
+
             FROM ad_group
+
             WHERE campaign.id = {campaign_id}
-            ORDER BY ad_group.name
+              AND {date_filter}
+
+            ORDER BY metrics.cost_micros DESC
         """
 
         response = execute_query(
             client,
             customer_id,
-            query
+            query,
         )
 
         results = []
@@ -499,42 +562,213 @@ def ad_groups(
                 row.campaign.name
             )
 
+            cost = (
+                row.metrics.cost_micros
+                / 1_000_000
+            )
+
+            conversions = safe_float(
+                row.metrics.conversions
+            )
+
+            conversion_value = safe_float(
+                row.metrics.conversions_value
+            )
+
+            average_cpc = (
+                row.metrics.average_cpc
+                / 1_000_000
+            )
+
+            ctr = (
+                safe_float(
+                    row.metrics.ctr
+                )
+                * 100
+            )
+
+            conversion_rate = (
+                safe_float(
+                    row.metrics
+                    .conversions_from_interactions_rate
+                )
+                * 100
+            )
+
+            cpa = (
+                round(
+                    cost / conversions,
+                    2,
+                )
+                if conversions > 0
+                else None
+            )
+
+            roas = (
+                round(
+                    conversion_value / cost,
+                    2,
+                )
+                if cost > 0
+                else None
+            )
+
             results.append(
                 {
                     "ad_group_id": str(
                         row.ad_group.id
                     ),
-                    "ad_group_name":
-                        row.ad_group.name,
-                    "status":
-                        enum_name(
-                            row.ad_group.status
-                        ),
-                    "type":
-                        enum_name(
-                            row.ad_group.type
-                        )
+
+                    "ad_group_name": (
+                        row.ad_group.name
+                    ),
+
+                    "status": enum_name(
+                        row.ad_group.status
+                    ),
+
+                    "type": enum_name(
+                        row.ad_group.type
+                    ),
+
+                    "impressions": (
+                        row.metrics.impressions
+                    ),
+
+                    "clicks": (
+                        row.metrics.clicks
+                    ),
+
+                    "ctr_percent": round(
+                        ctr,
+                        2,
+                    ),
+
+                    "average_cpc": round(
+                        average_cpc,
+                        2,
+                    ),
+
+                    "cost": round(
+                        cost,
+                        2,
+                    ),
+
+                    "conversions": round(
+                        conversions,
+                        2,
+                    ),
+
+                    "conversion_rate_percent": round(
+                        conversion_rate,
+                        2,
+                    ),
+
+                    "conversion_value": round(
+                        conversion_value,
+                        2,
+                    ),
+
+                    "cpa": cpa,
+
+                    "roas": roas,
                 }
             )
 
+        total_cost = round(
+            sum(
+                item["cost"]
+                for item in results
+            ),
+            2,
+        )
+
+        total_conversions = round(
+            sum(
+                item["conversions"]
+                for item in results
+            ),
+            2,
+        )
+
+        total_conversion_value = round(
+            sum(
+                item["conversion_value"]
+                for item in results
+            ),
+            2,
+        )
+
+        account_roas = (
+            round(
+                total_conversion_value
+                / total_cost,
+                2,
+            )
+            if total_cost > 0
+            else None
+        )
+
+        account_cpa = (
+            round(
+                total_cost
+                / total_conversions,
+                2,
+            )
+            if total_conversions > 0
+            else None
+        )
+
         return {
-            "customer_id":
-                customer_id,
-            "campaign_id":
-                campaign_id,
-            "campaign_name":
-                campaign_name,
-            "total_ad_groups":
-                len(results),
-            "ad_groups":
-                results
+            "status": "SUCCESS",
+
+            "customer_id": customer_id,
+
+            "campaign_id": campaign_id,
+
+            "campaign_name": campaign_name,
+
+            "date_range": date_range,
+
+            "summary": {
+                "total_ad_groups": len(
+                    results
+                ),
+
+                "total_cost": total_cost,
+
+                "total_conversions": (
+                    total_conversions
+                ),
+
+                "total_conversion_value": (
+                    total_conversion_value
+                ),
+
+                "account_cpa": (
+                    account_cpa
+                ),
+
+                "account_roas": (
+                    account_roas
+                ),
+            },
+
+            "ad_groups": results,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
         }
 
     except Exception as error:
 
         return {
             "status": "FAILED",
-            "error": str(error)
+            "error": str(error),
         }
 # ----------------------------------------------------
 # PAUSE AD GROUPE
