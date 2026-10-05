@@ -5510,7 +5510,6 @@ customer_id: str
     except Exception as error:
         return {"error": str(error)}
 
-
 # ============================================================
 # OPTIMIZATION OPPORTUNITIES
 # Analyse à la demande d'une campagne précise
@@ -5519,37 +5518,58 @@ customer_id: str
 
 @app.get("/optimization-opportunities")
 def optimization_opportunities(
-
-    customer_id: str,
-
-    campaign_id: str = Query(
-        ...,
-        description="ID Google Ads de la campagne à analyser",
+    customer_id: str = Query(..., description="ID du compte Google Ads"),
+    campaign_id: str = Query(..., description="ID Google Ads de la campagne à analyser"),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description="Période Google Ads prédéfinie. LAST_30_DAYS par défaut.",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description="Date de début personnalisée au format YYYY-MM-DD.",
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description="Date de fin personnalisée au format YYYY-MM-DD.",
     ),
 ):
-    campaign_id = campaign_id.replace("-", "").strip()
-    
-
     try:
-        client = get_google_ads_client()
+        customer_id = normalize_customer_id(customer_id)
+        campaign_id = campaign_id.replace("-", "").strip()
 
-        customer_id = normalize_customer_id(
-                customer_id
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "campaign_id": campaign_id,
+                "automatic_action": False,
+                "error": "campaign_id doit contenir uniquement des chiffres.",
+            }
+
+        date_configuration = build_date_filter(
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
         )
+        date_filter = date_configuration["filter"]
+        date_range = {
+            "mode": date_configuration["mode"],
+            "period": date_configuration["period"],
+            "start_date": date_configuration["start_date"],
+            "end_date": date_configuration["end_date"],
+        }
 
+        client = get_google_ads_client()
         opportunities: List[Dict[str, Any]] = []
         audit_errors: List[Dict[str, str]] = []
         audit_coverage: Dict[str, str] = {}
-
         campaign_summary: Dict[str, Any] = {
             "campaign_id": campaign_id,
-            "period": "LAST_30_DAYS",
+            "date_range": date_range,
         }
 
         # ----------------------------------------------------
         # 1. PERFORMANCE, CPA, ROAS, IMPRESSION SHARE, ENCHÈRES
         # ----------------------------------------------------
-
         try:
             performance_query = f"""
                 SELECT
@@ -5571,204 +5591,104 @@ def optimization_opportunities(
                     metrics.search_rank_lost_impression_share
                 FROM campaign
                 WHERE campaign.id = {campaign_id}
-                  AND segments.date DURING LAST_30_DAYS
+                  AND {date_filter}
             """
-
-            rows = execute_query(
-    client,
-    customer_id,
-    performance_query
-)
+            rows = execute_query(client, customer_id, performance_query)
 
             if not rows:
-
-                   return {
-
-                        "campaign_id": campaign_id,
-
-                        "status": "NO_RECENT_DATA",
-
-                        "message":
-                            "Aucune donnée durant LAST_30_DAYS.",
-
-                        "customer_id": customer_id,
-
-                        "automatic_action": False
-                    }
+                return {
+                    "status": "NO_DATA",
+                    "campaign_id": campaign_id,
+                    "customer_id": customer_id,
+                    "date_range": date_range,
+                    "message": "Aucune donnée n'a été retournée pour la période demandée.",
+                    "automatic_action": False,
+                }
 
             row = rows[0]
-
             cost = row.metrics.cost_micros / 1_000_000
             conversions = safe_float(row.metrics.conversions)
-            conversion_value = safe_float(
-                row.metrics.conversions_value
-            )
+            conversion_value = safe_float(row.metrics.conversions_value)
+            cpa = round(cost / conversions, 2) if conversions > 0 else None
+            roas = round(conversion_value / cost, 2) if cost > 0 else None
+            ctr = round(safe_float(row.metrics.ctr) * 100, 2)
+            impression_share = safe_float(row.metrics.search_impression_share)
+            lost_budget = safe_float(row.metrics.search_budget_lost_impression_share)
+            lost_rank = safe_float(row.metrics.search_rank_lost_impression_share)
+            daily_budget = row.campaign_budget.amount_micros / 1_000_000
+            bidding_strategy = enum_name(row.campaign.bidding_strategy_type)
 
-            cpa = (
-                round(cost / conversions, 2)
-                if conversions > 0
-                else None
-            )
-
-            roas = (
-                round(conversion_value / cost, 2)
-                if cost > 0
-                else None
-            )
-
-            ctr = round(
-                safe_float(row.metrics.ctr) * 100,
-                2,
-            )
-
-            impression_share = safe_float(
-                row.metrics.search_impression_share
-            )
-
-            lost_budget = safe_float(
-                row.metrics
-                .search_budget_lost_impression_share
-            )
-
-            lost_rank = safe_float(
-                row.metrics
-                .search_rank_lost_impression_share
-            )
-
-            daily_budget = (
-                row.campaign_budget.amount_micros
-                / 1_000_000
-            )
-
-            campaign_summary.update(
-                {
-                    "campaign_name": row.campaign.name,
-                    "status": enum_name(
-                        row.campaign.status
-                    ),
-                    "channel_type": enum_name(
-                        row.campaign
-                        .advertising_channel_type
-                    ),
-                    "bidding_strategy": enum_name(
-                        row.campaign
-                        .bidding_strategy_type
-                    ),
-                    "daily_budget": round(
-                        daily_budget,
-                        2,
-                    ),
-                    "impressions": row.metrics.impressions,
-                    "clicks": row.metrics.clicks,
-                    "ctr_percent": ctr,
-                    "cost": round(cost, 2),
-                    "conversions": round(
-                        conversions,
-                        2,
-                    ),
-                    "conversion_value": round(
-                        conversion_value,
-                        2,
-                    ),
-                    "cpa": cpa,
-                    "roas": roas,
-                    "search_impression_share_percent": (
-                        round(impression_share * 100, 2)
-                        if impression_share > 0
-                        else None
-                    ),
-                    "lost_budget_share_percent": (
-                        round(lost_budget * 100, 2)
-                        if lost_budget > 0
-                        else 0
-                    ),
-                    "lost_rank_share_percent": (
-                        round(lost_rank * 100, 2)
-                        if lost_rank > 0
-                        else 0
-                    ),
-                }
-            )
-
+            campaign_summary.update({
+                "campaign_name": row.campaign.name,
+                "status": enum_name(row.campaign.status),
+                "channel_type": enum_name(row.campaign.advertising_channel_type),
+                "bidding_strategy": bidding_strategy,
+                "daily_budget": round(daily_budget, 2),
+                "impressions": row.metrics.impressions,
+                "clicks": row.metrics.clicks,
+                "ctr_percent": ctr,
+                "cost": round(cost, 2),
+                "conversions": round(conversions, 2),
+                "conversion_value": round(conversion_value, 2),
+                "cpa": cpa,
+                "roas": roas,
+                "search_impression_share_percent": (
+                    round(impression_share * 100, 2) if impression_share > 0 else None
+                ),
+                "lost_budget_share_percent": (
+                    round(lost_budget * 100, 2) if lost_budget > 0 else 0
+                ),
+                "lost_rank_share_percent": (
+                    round(lost_rank * 100, 2) if lost_rank > 0 else 0
+                ),
+            })
             audit_coverage["campaign_performance"] = "SUCCESS"
 
             non_smart_strategies = {
-                "MANUAL_CPC",
-                "MANUAL_CPM",
-                "MANUAL_CPV",
-                "COMMISSION",
+                "MANUAL_CPC", "MANUAL_CPM", "MANUAL_CPV", "COMMISSION"
             }
-
-            bidding_strategy = enum_name(
-                row.campaign.bidding_strategy_type
-            )
-
-            if (
-                conversions >= 30
-                and bidding_strategy in non_smart_strategies
-            ):
+            if conversions >= 30 and bidding_strategy in non_smart_strategies:
                 add_opportunity(
                     opportunities,
                     "MEDIUM",
                     "BIDDING_STRATEGY",
                     "Volume suffisant pour évaluer une stratégie intelligente",
                     (
-                        f"La campagne a généré "
-                        f"{round(conversions, 2)} conversions "
-                        f"durant les 30 derniers jours et utilise "
-                        f"{bidding_strategy}."
+                        f"La campagne a généré {round(conversions, 2)} conversions "
+                        f"durant la période analysée et utilise {bidding_strategy}."
                     ),
                     (
-                        "Évaluer Maximiser les conversions ou CPA "
-                        "cible. Vérifier d'abord la qualité du suivi "
-                        "des conversions et la stabilité du CPA."
+                        "Évaluer Maximiser les conversions ou CPA cible. Vérifier "
+                        "d'abord la qualité du suivi des conversions et la stabilité du CPA."
                     ),
                     {
-                        "conversions_30d": round(
-                            conversions,
-                            2,
-                        ),
+                        "conversions_analyzed_period": round(conversions, 2),
                         "current_strategy": bidding_strategy,
                         "observed_cpa": cpa,
                     },
                 )
 
             if lost_budget >= 0.20:
-                if (
-                    conversions >= 10
-                    and roas is not None
-                    and roas >= 2
-                ):
+                if conversions >= 10 and roas is not None and roas >= 2:
                     add_opportunity(
                         opportunities,
                         "HIGH",
                         "IMPRESSION_SHARE_BUDGET",
                         "Part d'impressions perdue à cause du budget",
                         (
-                            f"La campagne perd environ "
-                            f"{round(lost_budget * 100, 2)} % "
-                            f"des impressions à cause du budget."
+                            f"La campagne perd environ {round(lost_budget * 100, 2)} % "
+                            "des impressions à cause du budget."
                         ),
                         (
-                            "La campagne produit des conversions et "
-                            "un ROAS positif. Évaluer une augmentation "
-                            "progressive du budget après validation."
+                            "La campagne produit des conversions et un ROAS positif. "
+                            "Évaluer une augmentation progressive du budget après validation."
                         ),
                         {
-                            "lost_budget_share_percent": round(
-                                lost_budget * 100,
-                                2,
-                            ),
-                            "conversions": round(
-                                conversions,
-                                2,
-                            ),
+                            "lost_budget_share_percent": round(lost_budget * 100, 2),
+                            "conversions": round(conversions, 2),
                             "cpa": cpa,
                             "roas": roas,
-                            "current_daily_budget": round(
-                                daily_budget,
-                                2,
-                            ),
+                            "current_daily_budget": round(daily_budget, 2),
                         },
                     )
                 else:
@@ -5778,24 +5698,16 @@ def optimization_opportunities(
                         "IMPRESSION_SHARE_BUDGET",
                         "Part d'impressions perdue à cause du budget",
                         (
-                            f"La campagne perd environ "
-                            f"{round(lost_budget * 100, 2)} % "
-                            f"des impressions à cause du budget."
+                            f"La campagne perd environ {round(lost_budget * 100, 2)} % "
+                            "des impressions à cause du budget."
                         ),
                         (
-                            "Ne pas augmenter automatiquement le "
-                            "budget. Examiner d'abord le CPA, le ROAS "
-                            "et la qualité des conversions."
+                            "Ne pas augmenter automatiquement le budget. Examiner d'abord "
+                            "le CPA, le ROAS et la qualité des conversions."
                         ),
                         {
-                            "lost_budget_share_percent": round(
-                                lost_budget * 100,
-                                2,
-                            ),
-                            "conversions": round(
-                                conversions,
-                                2,
-                            ),
+                            "lost_budget_share_percent": round(lost_budget * 100, 2),
+                            "conversions": round(conversions, 2),
                             "cpa": cpa,
                             "roas": roas,
                         },
@@ -5808,39 +5720,26 @@ def optimization_opportunities(
                     "IMPRESSION_SHARE_RANK",
                     "Part d'impressions perdue à cause du classement",
                     (
-                        f"La campagne perd environ "
-                        f"{round(lost_rank * 100, 2)} % "
-                        f"des impressions à cause du classement."
+                        f"La campagne perd environ {round(lost_rank * 100, 2)} % "
+                        "des impressions à cause du classement."
                     ),
                     (
-                        "Analyser le Quality Score, la pertinence des "
-                        "annonces, le CTR attendu, l'expérience de "
-                        "page de destination et les enchères."
+                        "Analyser le Quality Score, la pertinence des annonces, le CTR "
+                        "attendu, l'expérience de page de destination et les enchères."
                     ),
                     {
-                        "lost_rank_share_percent": round(
-                            lost_rank * 100,
-                            2,
-                        ),
+                        "lost_rank_share_percent": round(lost_rank * 100, 2),
                         "ctr_percent": ctr,
                         "cpa": cpa,
                     },
                 )
-
         except Exception as error:
             audit_coverage["campaign_performance"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "campaign_performance",
-                    "error": str(error),
-                }
-            )
-
+            audit_errors.append({"audit": "campaign_performance", "error": str(error)})
 
         # ----------------------------------------------------
-        # ANALYSE COMPARATIVE DES GROUPES D'ANNONCES
+        # 2. ANALYSE COMPARATIVE DES GROUPES D'ANNONCES
         # ----------------------------------------------------
-
         try:
             ad_group_query = f"""
                 SELECT
@@ -5860,295 +5759,117 @@ def optimization_opportunities(
                     metrics.conversions_from_interactions_rate
                 FROM ad_group
                 WHERE campaign.id = {campaign_id}
-                  AND segments.date DURING LAST_30_DAYS
+                  AND {date_filter}
                 ORDER BY metrics.cost_micros DESC
             """
-
-            ad_group_rows = execute_query(
-                client,
-                customer_id,
-                ad_group_query
-            )
-
+            ad_group_rows = execute_query(client, customer_id, ad_group_query)
             ad_group_performance = []
 
             for row in ad_group_rows:
-                cost = (
-                    row.metrics.cost_micros
-                    / 1_000_000
+                item_cost = row.metrics.cost_micros / 1_000_000
+                item_conversions = safe_float(row.metrics.conversions)
+                item_value = safe_float(row.metrics.conversions_value)
+                item_ctr = safe_float(row.metrics.ctr) * 100
+                item_conversion_rate = (
+                    safe_float(row.metrics.conversions_from_interactions_rate) * 100
                 )
+                item_average_cpc = row.metrics.average_cpc / 1_000_000
+                item_cpa = item_cost / item_conversions if item_conversions > 0 else None
+                item_roas = item_value / item_cost if item_cost > 0 else None
 
-                conversions = safe_float(
-                    row.metrics.conversions
-                )
+                ad_group_performance.append({
+                    "ad_group_id": str(row.ad_group.id),
+                    "ad_group_name": row.ad_group.name,
+                    "status": enum_name(row.ad_group.status),
+                    "type": enum_name(row.ad_group.type),
+                    "impressions": row.metrics.impressions,
+                    "clicks": row.metrics.clicks,
+                    "ctr_percent": round(item_ctr, 2),
+                    "average_cpc": round(item_average_cpc, 2),
+                    "cost": round(item_cost, 2),
+                    "conversions": round(item_conversions, 2),
+                    "conversion_rate_percent": round(item_conversion_rate, 2),
+                    "conversion_value": round(item_value, 2),
+                    "cpa": round(item_cpa, 2) if item_cpa is not None else None,
+                    "roas": round(item_roas, 2) if item_roas is not None else None,
+                })
 
-                conversion_value = safe_float(
-                    row.metrics.conversions_value
-                )
-
-                ctr = (
-                    safe_float(row.metrics.ctr)
-                    * 100
-                )
-
-                conversion_rate = (
-                    safe_float(
-                        row.metrics
-                        .conversions_from_interactions_rate
-                    )
-                    * 100
-                )
-
-                average_cpc = (
-                    row.metrics.average_cpc
-                    / 1_000_000
-                )
-
-                cpa = (
-                    cost / conversions
-                    if conversions > 0
-                    else None
-                )
-
-                roas = (
-                    conversion_value / cost
-                    if cost > 0
-                    else None
-                )
-
-                ad_group_performance.append(
-                    {
-                        "ad_group_id": str(
-                            row.ad_group.id
-                        ),
-                        "ad_group_name": (
-                            row.ad_group.name
-                        ),
-                        "status": enum_name(
-                            row.ad_group.status
-                        ),
-                        "type": enum_name(
-                            row.ad_group.type
-                        ),
-                        "impressions": (
-                            row.metrics.impressions
-                        ),
-                        "clicks": (
-                            row.metrics.clicks
-                        ),
-                        "ctr_percent": round(
-                            ctr,
-                            2
-                        ),
-                        "average_cpc": round(
-                            average_cpc,
-                            2
-                        ),
-                        "cost": round(
-                            cost,
-                            2
-                        ),
-                        "conversions": round(
-                            conversions,
-                            2
-                        ),
-                        "conversion_rate_percent": round(
-                            conversion_rate,
-                            2
-                        ),
-                        "conversion_value": round(
-                            conversion_value,
-                            2
-                        ),
-                        "cpa": (
-                            round(cpa, 2)
-                            if cpa is not None
-                            else None
-                        ),
-                        "roas": (
-                            round(roas, 2)
-                            if roas is not None
-                            else None
-                        )
-                    }
-                )
-
-            eligible_for_comparison = [
-                item
-                for item in ad_group_performance
-                if item["clicks"] >= 5
+            eligible = [x for x in ad_group_performance if x["clicks"] >= 5]
+            with_conversions = [x for x in eligible if x["conversions"] > 0]
+            without_conversions = [
+                x for x in eligible if x["cost"] >= 10 and x["conversions"] == 0
             ]
 
-            groups_with_conversions = [
-                item
-                for item in eligible_for_comparison
-                if item["conversions"] > 0
-            ]
+            best_by_cpa = min(with_conversions, key=lambda x: x["cpa"]) if with_conversions else None
+            worst_by_cpa = max(with_conversions, key=lambda x: x["cpa"]) if with_conversions else None
+            best_by_conversions = (
+                max(with_conversions, key=lambda x: x["conversions"])
+                if with_conversions else None
+            )
+            with_roas = [x for x in with_conversions if x["roas"] is not None]
+            best_by_roas = max(with_roas, key=lambda x: x["roas"]) if with_roas else None
 
-            groups_without_conversions = [
-                item
-                for item in eligible_for_comparison
-                if (
-                    item["cost"] >= 10
-                    and item["conversions"] == 0
-                )
-            ]
-
-            best_by_cpa = None
-            worst_by_cpa = None
-            best_by_roas = None
-            best_by_conversions = None
-
-            if groups_with_conversions:
-                best_by_cpa = min(
-                    groups_with_conversions,
-                    key=lambda item: item["cpa"]
-                )
-
-                worst_by_cpa = max(
-                    groups_with_conversions,
-                    key=lambda item: item["cpa"]
-                )
-
-                best_by_conversions = max(
-                    groups_with_conversions,
-                    key=lambda item: (
-                        item["conversions"]
-                    )
-                )
-
-                groups_with_roas = [
-                    item
-                    for item in groups_with_conversions
-                    if item["roas"] is not None
-                ]
-
-                if groups_with_roas:
-                    best_by_roas = max(
-                        groups_with_roas,
-                        key=lambda item: item["roas"]
-                    )
-
-            ad_group_comparison = {
-                "total_ad_groups": len(
-                    ad_group_performance
-                ),
-                "groups_with_sufficient_data": len(
-                    eligible_for_comparison
-                ),
-                "best_by_cpa": best_by_cpa,
-                "worst_by_cpa": worst_by_cpa,
-                "best_by_roas": best_by_roas,
-                "best_by_conversion_volume": (
-                    best_by_conversions
-                ),
-                "groups_spending_without_conversions": (
-                    groups_without_conversions
-                )
+            campaign_summary["ad_group_analysis"] = {
+                "performance": ad_group_performance,
+                "comparison": {
+                    "total_ad_groups": len(ad_group_performance),
+                    "groups_with_sufficient_data": len(eligible),
+                    "best_by_cpa": best_by_cpa,
+                    "worst_by_cpa": worst_by_cpa,
+                    "best_by_roas": best_by_roas,
+                    "best_by_conversion_volume": best_by_conversions,
+                    "groups_spending_without_conversions": without_conversions,
+                },
             }
 
-            campaign_summary[
-                "ad_group_analysis"
-            ] = {
-                "performance": (
-                    ad_group_performance
-                ),
-                "comparison": (
-                    ad_group_comparison
-                )
-            }
-
-            if groups_without_conversions:
+            if without_conversions:
                 add_opportunity(
                     opportunities,
                     "HIGH",
                     "AD_GROUP_NO_CONVERSIONS",
+                    "Groupes d'annonces avec dépense sans conversion",
                     (
-                        "Groupes d'annonces avec "
-                        "dépense sans conversion"
+                        f"{len(without_conversions)} groupe(s) d'annonces ont dépensé "
+                        "au moins 10 $ avec un minimum de 5 clics sans conversion."
                     ),
                     (
-                        f"{len(groups_without_conversions)} "
-                        "groupe(s) d'annonces ont dépensé "
-                        "au moins 10 $ avec un minimum de "
-                        "5 clics sans générer de conversion."
+                        "Examiner les mots-clés, termes de recherche, annonces et pages "
+                        "de destination. Ne pas les mettre en pause automatiquement."
                     ),
-                    (
-                        "Examiner les mots-clés, termes de "
-                        "recherche, annonces et pages de "
-                        "destination de ces groupes. "
-                        "Ne pas les mettre en pause "
-                        "automatiquement."
-                    ),
-                    {
-                        "ad_groups": (
-                            groups_without_conversions
-                        )
-                    }
+                    {"ad_groups": without_conversions},
                 )
 
             if (
                 best_by_cpa is not None
                 and worst_by_cpa is not None
-                and best_by_cpa["ad_group_id"]
-                != worst_by_cpa["ad_group_id"]
-                and worst_by_cpa["cpa"]
-                >= best_by_cpa["cpa"] * 1.5
+                and best_by_cpa["ad_group_id"] != worst_by_cpa["ad_group_id"]
+                and worst_by_cpa["cpa"] >= best_by_cpa["cpa"] * 1.5
             ):
                 add_opportunity(
                     opportunities,
                     "MEDIUM",
                     "AD_GROUP_CPA_GAP",
+                    "Écart important de CPA entre les groupes d'annonces",
                     (
-                        "Écart important de CPA entre "
-                        "les groupes d'annonces"
+                        f"Le groupe {best_by_cpa['ad_group_name']} obtient un CPA de "
+                        f"{best_by_cpa['cpa']}, tandis que {worst_by_cpa['ad_group_name']} "
+                        f"obtient un CPA de {worst_by_cpa['cpa']}."
                     ),
                     (
-                        f"Le groupe "
-                        f"{best_by_cpa['ad_group_name']} "
-                        f"obtient un CPA de "
-                        f"{best_by_cpa['cpa']}, tandis que "
-                        f"{worst_by_cpa['ad_group_name']} "
-                        f"obtient un CPA de "
-                        f"{worst_by_cpa['cpa']}."
+                        "Comparer les intentions de recherche, les mots-clés, les annonces "
+                        "et les pages. Évaluer une réallocation seulement après validation."
                     ),
-                    (
-                        "Comparer les intentions de recherche, "
-                        "les mots-clés, les annonces et les "
-                        "pages de destination. Évaluer une "
-                        "réallocation prudente seulement après "
-                        "validation humaine."
-                    ),
-                    {
-                        "best_ad_group": best_by_cpa,
-                        "weakest_ad_group": (
-                            worst_by_cpa
-                        )
-                    }
+                    {"best_ad_group": best_by_cpa, "weakest_ad_group": worst_by_cpa},
                 )
 
-            audit_coverage[
-                "ad_group_comparison"
-            ] = "SUCCESS"
-
+            audit_coverage["ad_group_comparison"] = "SUCCESS"
         except Exception as error:
-            audit_coverage[
-                "ad_group_comparison"
-            ] = "FAILED"
-
-            audit_errors.append(
-                {
-                    "audit": (
-                        "ad_group_comparison"
-                    ),
-                    "error": str(error)
-                }
-            )
+            audit_coverage["ad_group_comparison"] = "FAILED"
+            audit_errors.append({"audit": "ad_group_comparison", "error": str(error)})
 
         # ----------------------------------------------------
-        # 2. QUALITY SCORE ET TYPES DE CORRESPONDANCE
+        # 3. QUALITY SCORE ET TYPES DE CORRESPONDANCE
         # ----------------------------------------------------
-
         try:
             keyword_query = f"""
                 SELECT
@@ -6168,108 +5889,59 @@ def optimization_opportunities(
                     metrics.conversions
                 FROM keyword_view
                 WHERE campaign.id = {campaign_id}
-                  AND segments.date DURING LAST_30_DAYS
+                  AND {date_filter}
             """
-
-            keyword_rows = execute_query(
-    client,
-    customer_id,
-    keyword_query,
-)
-
+            keyword_rows = execute_query(client, customer_id, keyword_query)
             low_quality_keywords = []
             broad_waste_keywords = []
 
             for row in keyword_rows:
-                keyword = (
-                    row.ad_group_criterion.keyword.text
-                )
-
-                match_type = enum_name(
-                    row.ad_group_criterion
-                    .keyword.match_type
-                )
-
-                quality_score = (
-                    row.ad_group_criterion
-                    .quality_info.quality_score
-                )
-
+                keyword = row.ad_group_criterion.keyword.text
+                match_type = enum_name(row.ad_group_criterion.keyword.match_type)
+                quality_score = row.ad_group_criterion.quality_info.quality_score
                 ad_relevance = enum_name(
-                    row.ad_group_criterion
-                    .quality_info.creative_quality_score
+                    row.ad_group_criterion.quality_info.creative_quality_score
                 )
-
                 landing_page = enum_name(
-                    row.ad_group_criterion
-                    .quality_info.post_click_quality_score
+                    row.ad_group_criterion.quality_info.post_click_quality_score
                 )
-
                 expected_ctr = enum_name(
-                    row.ad_group_criterion
-                    .quality_info.search_predicted_ctr
+                    row.ad_group_criterion.quality_info.search_predicted_ctr
                 )
+                item_cost = row.metrics.cost_micros / 1_000_000
+                item_conversions = safe_float(row.metrics.conversions)
 
-                cost = (
-                    row.metrics.cost_micros
-                    / 1_000_000
-                )
-
-                conversions = safe_float(
-                    row.metrics.conversions
-                )
-
-                if quality_score > 0 and quality_score <= 5:
-                    low_quality_keywords.append(
-                        {
-                            "ad_group": row.ad_group.name,
-                            "keyword": keyword,
-                            "quality_score": quality_score,
-                            "ad_relevance": ad_relevance,
-                            "expected_ctr": expected_ctr,
-                            "landing_page_experience": (
-                                landing_page
-                            ),
-                            "impressions": (
-                                row.metrics.impressions
-                            ),
-                            "clicks": row.metrics.clicks,
-                            "cost": round(cost, 2),
-                            "conversions": round(
-                                conversions,
-                                2,
-                            ),
-                        }
-                    )
+                if 0 < quality_score <= 5:
+                    low_quality_keywords.append({
+                        "ad_group": row.ad_group.name,
+                        "keyword": keyword,
+                        "quality_score": quality_score,
+                        "ad_relevance": ad_relevance,
+                        "expected_ctr": expected_ctr,
+                        "landing_page_experience": landing_page,
+                        "impressions": row.metrics.impressions,
+                        "clicks": row.metrics.clicks,
+                        "cost": round(item_cost, 2),
+                        "conversions": round(item_conversions, 2),
+                    })
 
                 if (
                     match_type == "BROAD"
                     and row.metrics.clicks >= 5
-                    and conversions == 0
-                    and cost >= 10
+                    and item_conversions == 0
+                    and item_cost >= 10
                 ):
-                    broad_waste_keywords.append(
-                        {
-                            "ad_group": row.ad_group.name,
-                            "keyword": keyword,
-                            "match_type": match_type,
-                            "clicks": row.metrics.clicks,
-                            "cost": round(cost, 2),
-                            "conversions": 0,
-                        }
-                    )
+                    broad_waste_keywords.append({
+                        "ad_group": row.ad_group.name,
+                        "keyword": keyword,
+                        "match_type": match_type,
+                        "clicks": row.metrics.clicks,
+                        "cost": round(item_cost, 2),
+                        "conversions": 0,
+                    })
 
-            low_quality_keywords.sort(
-                key=lambda item: (
-                    item["quality_score"],
-                    -item["cost"],
-                )
-            )
-
-            broad_waste_keywords.sort(
-                key=lambda item: item["cost"],
-                reverse=True,
-            )
+            low_quality_keywords.sort(key=lambda x: (x["quality_score"], -x["cost"]))
+            broad_waste_keywords.sort(key=lambda x: x["cost"], reverse=True)
 
             if low_quality_keywords:
                 add_opportunity(
@@ -6277,57 +5949,39 @@ def optimization_opportunities(
                     "HIGH",
                     "QUALITY_SCORE",
                     "Mots-clés avec un faible Quality Score",
+                    f"{len(low_quality_keywords)} mot(s)-clé(s) ont un Quality Score de 5 ou moins.",
                     (
-                        f"{len(low_quality_keywords)} mot(s)-clé(s) "
-                        f"ont un Quality Score de 5 ou moins."
+                        "Vérifier la pertinence de l'annonce, le CTR attendu et "
+                        "l'expérience sur la page de destination."
                     ),
-                    (
-                        "Vérifier séparément la pertinence de "
-                        "l'annonce, le CTR attendu et l'expérience "
-                        "sur la page de destination."
-                    ),
-                    {
-                        "keywords": low_quality_keywords[:25]
-                    },
+                    {"keywords": low_quality_keywords[:25]},
                 )
 
             if broad_waste_keywords:
                 add_opportunity(
-    opportunities,
-    "HIGH",
-    "MATCH_TYPE",
-    "Requêtes larges avec dépense sans conversion",
-    (
-        f"{len(broad_waste_keywords)} mot(s)-clé(s) "
-        f"en requête large ont au moins 5 clics, "
-        f"10 $ de coût et aucune conversion."
-    ),
-    (
-        "Examiner les termes de recherche. Évaluer "
-        "Phrase Match, Exact Match ou des mots-clés "
-        "négatifs. Ne pas changer automatiquement le "
-        "type de correspondance."
-    ),
-    {
-        "keywords": broad_waste_keywords[:25]
-    },
-)
+                    opportunities,
+                    "HIGH",
+                    "MATCH_TYPE",
+                    "Requêtes larges avec dépense sans conversion",
+                    (
+                        f"{len(broad_waste_keywords)} mot(s)-clé(s) larges ont au moins "
+                        "5 clics, 10 $ de coût et aucune conversion."
+                    ),
+                    (
+                        "Examiner les termes de recherche. Évaluer Phrase, Exact ou des "
+                        "négatifs. Ne pas modifier automatiquement la correspondance."
+                    ),
+                    {"keywords": broad_waste_keywords[:25]},
+                )
 
             audit_coverage["keyword_quality"] = "SUCCESS"
-
         except Exception as error:
             audit_coverage["keyword_quality"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "keyword_quality",
-                    "error": str(error),
-                }
-            )
+            audit_errors.append({"audit": "keyword_quality", "error": str(error)})
 
         # ----------------------------------------------------
-        # 3. ANNONCES RSA : 15 TITRES ET 4 DESCRIPTIONS
+        # 4. ANNONCES RSA - ÉTAT ACTUEL, SANS DATE
         # ----------------------------------------------------
-
         try:
             rsa_query = f"""
                 SELECT
@@ -6345,47 +5999,16 @@ def optimization_opportunities(
                   AND ad_group_ad.status != 'REMOVED'
                   AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
             """
-
-            rsa_rows = execute_query(
-    client,
-    customer_id,
-    rsa_query
-)
-
+            rsa_rows = execute_query(client, customer_id, rsa_query)
             incomplete_rsa = []
 
             for row in rsa_rows:
-                headlines = list(
-                    row.ad_group_ad.ad
-                    .responsive_search_ad.headlines
-                )
-
-                descriptions = list(
-                    row.ad_group_ad.ad
-                    .responsive_search_ad.descriptions
-                )
-
-                headline_texts = [
-                    asset.text.strip().lower()
-                    for asset in headlines
-                    if asset.text
-                ]
-
-                description_texts = [
-                    asset.text.strip().lower()
-                    for asset in descriptions
-                    if asset.text
-                ]
-
-                duplicate_headlines = (
-                    len(headline_texts)
-                    - len(set(headline_texts))
-                )
-
-                duplicate_descriptions = (
-                    len(description_texts)
-                    - len(set(description_texts))
-                )
+                headlines = list(row.ad_group_ad.ad.responsive_search_ad.headlines)
+                descriptions = list(row.ad_group_ad.ad.responsive_search_ad.descriptions)
+                headline_texts = [x.text.strip().lower() for x in headlines if x.text]
+                description_texts = [x.text.strip().lower() for x in descriptions if x.text]
+                duplicate_headlines = len(headline_texts) - len(set(headline_texts))
+                duplicate_descriptions = len(description_texts) - len(set(description_texts))
 
                 if (
                     len(headlines) < 15
@@ -6393,40 +6016,18 @@ def optimization_opportunities(
                     or duplicate_headlines > 0
                     or duplicate_descriptions > 0
                 ):
-                    incomplete_rsa.append(
-                        {
-                            "ad_group": row.ad_group.name,
-                            "ad_id": str(
-                                row.ad_group_ad.ad.id
-                            ),
-                            "status": enum_name(
-                                row.ad_group_ad.status
-                            ),
-                            "ad_strength": enum_name(
-                                row.ad_group_ad.ad_strength
-                            ),
-                            "headlines_count": len(
-                                headlines
-                            ),
-                            "descriptions_count": len(
-                                descriptions
-                            ),
-                            "missing_headlines": max(
-                                0,
-                                15 - len(headlines),
-                            ),
-                            "missing_descriptions": max(
-                                0,
-                                4 - len(descriptions),
-                            ),
-                            "duplicate_headlines": (
-                                duplicate_headlines
-                            ),
-                            "duplicate_descriptions": (
-                                duplicate_descriptions
-                            ),
-                        }
-                    )
+                    incomplete_rsa.append({
+                        "ad_group": row.ad_group.name,
+                        "ad_id": str(row.ad_group_ad.ad.id),
+                        "status": enum_name(row.ad_group_ad.status),
+                        "ad_strength": enum_name(row.ad_group_ad.ad_strength),
+                        "headlines_count": len(headlines),
+                        "descriptions_count": len(descriptions),
+                        "missing_headlines": max(0, 15 - len(headlines)),
+                        "missing_descriptions": max(0, 4 - len(descriptions)),
+                        "duplicate_headlines": duplicate_headlines,
+                        "duplicate_descriptions": duplicate_descriptions,
+                    })
 
             if not rsa_rows:
                 add_opportunity(
@@ -6434,17 +6035,9 @@ def optimization_opportunities(
                     "INFO",
                     "RSA",
                     "Aucune RSA trouvée",
-                    (
-                        "Aucune annonce de recherche réactive "
-                        "admissible n'a été retournée pour cette "
-                        "campagne."
-                    ),
-                    (
-                        "Vérifier le type de campagne et la présence "
-                        "d'annonces Search actives."
-                    ),
+                    "Aucune RSA admissible n'a été retournée pour cette campagne.",
+                    "Vérifier le type de campagne et la présence d'annonces Search actives.",
                 )
-
             elif incomplete_rsa:
                 add_opportunity(
                     opportunities,
@@ -6452,36 +6045,24 @@ def optimization_opportunities(
                     "RSA_COMPLETENESS",
                     "Annonces RSA incomplètes",
                     (
-                        f"{len(incomplete_rsa)} RSA nécessitent "
-                        f"une révision des titres, descriptions ou "
-                        f"contenus dupliqués."
+                        f"{len(incomplete_rsa)} RSA nécessitent une révision des titres, "
+                        "descriptions ou contenus dupliqués."
                     ),
                     (
-                        "Évaluer l'utilisation de 15 titres et "
-                        "4 descriptions. Tester différents CTA, "
-                        "arguments de valeur et formulations. "
-                        "Ne publier aucun texte automatiquement."
+                        "Évaluer 15 titres et 4 descriptions. Tester différents CTA et "
+                        "arguments. Ne publier aucun texte automatiquement."
                     ),
-                    {
-                        "ads": incomplete_rsa[:25]
-                    },
+                    {"ads": incomplete_rsa[:25]},
                 )
 
             audit_coverage["rsa"] = "SUCCESS"
-
         except Exception as error:
             audit_coverage["rsa"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "rsa",
-                    "error": str(error),
-                }
-            )
+            audit_errors.append({"audit": "rsa", "error": str(error)})
 
         # ----------------------------------------------------
-        # 4. ASSETS DE CAMPAGNE
+        # 5. ASSETS DE CAMPAGNE - ÉTAT ACTUEL, SANS DATE
         # ----------------------------------------------------
-
         try:
             asset_query = f"""
                 SELECT
@@ -6492,36 +6073,14 @@ def optimization_opportunities(
                 WHERE campaign.id = {campaign_id}
                   AND campaign_asset.status != 'REMOVED'
             """
-
-            asset_rows = execute_query(
-    client,
-    customer_id,
-    asset_query
-)
-
-            active_asset_types = sorted(
-                {
-                    enum_name(
-                        row.campaign_asset.field_type
-                    )
-                    for row in asset_rows
-                    if enum_name(
-                        row.campaign_asset.status
-                    ) == "ENABLED"
-                }
-            )
-
-            expected_assets = {
-                "SITELINK",
-                "CALLOUT",
-                "STRUCTURED_SNIPPET",
-                "IMAGE",
-            }
-
-            missing_assets = sorted(
-                expected_assets
-                - set(active_asset_types)
-            )
+            asset_rows = execute_query(client, customer_id, asset_query)
+            active_asset_types = sorted({
+                enum_name(row.campaign_asset.field_type)
+                for row in asset_rows
+                if enum_name(row.campaign_asset.status) == "ENABLED"
+            })
+            expected_assets = {"SITELINK", "CALLOUT", "STRUCTURED_SNIPPET", "IMAGE"}
+            missing_assets = sorted(expected_assets - set(active_asset_types))
 
             if missing_assets:
                 add_opportunity(
@@ -6530,42 +6089,28 @@ def optimization_opportunities(
                     "MISSING_ASSETS",
                     "Composants publicitaires potentiellement manquants",
                     (
-                        "Les types de composants suivants ne sont "
-                        "pas actifs au niveau campagne : "
+                        "Les types suivants ne sont pas actifs au niveau campagne : "
                         + ", ".join(missing_assets)
                     ),
                     (
-                        "Vérifier si ces composants sont applicables "
-                        "à la campagne et s'ils existent au niveau "
-                        "du compte ou du groupe d'annonces avant "
-                        "d'en créer de nouveaux."
+                        "Vérifier s'ils sont applicables et s'ils existent au niveau du "
+                        "compte ou du groupe avant d'en créer."
                     ),
                     {
-                        "active_campaign_asset_types": (
-                            active_asset_types
-                        ),
-                        "missing_campaign_asset_types": (
-                            missing_assets
-                        ),
+                        "active_campaign_asset_types": active_asset_types,
+                        "missing_campaign_asset_types": missing_assets,
                         "scope_checked": "CAMPAIGN",
                     },
                 )
 
             audit_coverage["campaign_assets"] = "SUCCESS"
-
         except Exception as error:
             audit_coverage["campaign_assets"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "campaign_assets",
-                    "error": str(error),
-                }
-            )
+            audit_errors.append({"audit": "campaign_assets", "error": str(error)})
 
         # ----------------------------------------------------
-        # 5. TERMES DE RECHERCHE SANS CONVERSION
+        # 6. TERMES DE RECHERCHE SANS CONVERSION
         # ----------------------------------------------------
-
         try:
             search_term_query = f"""
                 SELECT
@@ -6578,99 +6123,54 @@ def optimization_opportunities(
                     metrics.conversions
                 FROM search_term_view
                 WHERE campaign.id = {campaign_id}
-                  AND segments.date DURING LAST_30_DAYS
+                  AND {date_filter}
             """
-
-            search_rows = execute_query(
-    client,
-    customer_id,
-    search_term_query
-)
-
+            search_rows = execute_query(client, customer_id, search_term_query)
             wasted_terms = []
 
             for row in search_rows:
-                cost = (
-                    row.metrics.cost_micros
-                    / 1_000_000
-                )
+                item_cost = row.metrics.cost_micros / 1_000_000
+                item_conversions = safe_float(row.metrics.conversions)
+                if row.metrics.clicks >= 5 and item_cost >= 10 and item_conversions == 0:
+                    wasted_terms.append({
+                        "ad_group": row.ad_group.name,
+                        "search_term": row.search_term_view.search_term,
+                        "impressions": row.metrics.impressions,
+                        "clicks": row.metrics.clicks,
+                        "cost": round(item_cost, 2),
+                        "conversions": 0,
+                    })
 
-                conversions = safe_float(
-                    row.metrics.conversions
-                )
-
-                if (
-                    row.metrics.clicks >= 5
-                    and cost >= 10
-                    and conversions == 0
-                ):
-                    wasted_terms.append(
-                        {
-                            "ad_group": row.ad_group.name,
-                            "search_term": (
-                                row.search_term_view
-                                .search_term
-                            ),
-                            "impressions": (
-                                row.metrics.impressions
-                            ),
-                            "clicks": row.metrics.clicks,
-                            "cost": round(cost, 2),
-                            "conversions": 0,
-                        }
-                    )
-
-            wasted_terms.sort(
-                key=lambda item: item["cost"],
-                reverse=True,
-            )
-
+            wasted_terms.sort(key=lambda x: x["cost"], reverse=True)
             if wasted_terms:
-                total_wasted_cost = round(
-                    sum(
-                        item["cost"]
-                        for item in wasted_terms
-                    ),
-                    2,
-                )
-
+                total_wasted_cost = round(sum(x["cost"] for x in wasted_terms), 2)
                 add_opportunity(
                     opportunities,
                     "HIGH",
                     "SEARCH_TERMS",
                     "Termes de recherche avec dépense sans conversion",
                     (
-                        f"{len(wasted_terms)} terme(s) ont dépassé "
-                        f"le seuil de 5 clics et 10 $ sans conversion."
+                        f"{len(wasted_terms)} terme(s) dépassent 5 clics et 10 $ "
+                        "sans conversion."
                     ),
                     (
-                        "Vérifier l'intention de chaque terme. "
-                        "Évaluer un mot-clé négatif seulement après "
+                        "Vérifier l'intention. Évaluer un négatif seulement après "
                         "validation humaine."
                     ),
                     {
-                        "estimated_wasted_cost": (
-                            total_wasted_cost
-                        ),
+                        "estimated_wasted_cost": total_wasted_cost,
                         "search_terms": wasted_terms[:50],
                     },
                 )
 
             audit_coverage["search_terms"] = "SUCCESS"
-
         except Exception as error:
             audit_coverage["search_terms"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "search_terms",
-                    "error": str(error),
-                }
-            )
+            audit_errors.append({"audit": "search_terms", "error": str(error)})
 
         # ----------------------------------------------------
-        # 6. PERFORMANCE PAR JOUR ET HEURE
+        # 7. PERFORMANCE PAR JOUR ET HEURE
         # ----------------------------------------------------
-
         try:
             schedule_query = f"""
                 SELECT
@@ -6684,87 +6184,47 @@ def optimization_opportunities(
                     metrics.conversions_value
                 FROM campaign
                 WHERE campaign.id = {campaign_id}
-                  AND segments.date DURING LAST_30_DAYS
+                  AND {date_filter}
             """
-
-            schedule_rows = execute_query(
-    client,
-    customer_id,
-    schedule_query
-)
-
+            schedule_rows = execute_query(client, customer_id, schedule_query)
             weak_periods = []
 
             for row in schedule_rows:
-                cost = (
-                    row.metrics.cost_micros
-                    / 1_000_000
-                )
+                item_cost = row.metrics.cost_micros / 1_000_000
+                item_conversions = safe_float(row.metrics.conversions)
+                if row.metrics.clicks >= 10 and item_cost >= 25 and item_conversions == 0:
+                    weak_periods.append({
+                        "day": enum_name(row.segments.day_of_week),
+                        "hour": row.segments.hour,
+                        "impressions": row.metrics.impressions,
+                        "clicks": row.metrics.clicks,
+                        "cost": round(item_cost, 2),
+                        "conversions": 0,
+                    })
 
-                conversions = safe_float(
-                    row.metrics.conversions
-                )
-
-                if (
-                    row.metrics.clicks >= 10
-                    and cost >= 25
-                    and conversions == 0
-                ):
-                    weak_periods.append(
-                        {
-                            "day": enum_name(
-                                row.segments.day_of_week
-                            ),
-                            "hour": row.segments.hour,
-                            "impressions": (
-                                row.metrics.impressions
-                            ),
-                            "clicks": row.metrics.clicks,
-                            "cost": round(cost, 2),
-                            "conversions": 0,
-                        }
-                    )
-
-            weak_periods.sort(
-                key=lambda item: item["cost"],
-                reverse=True,
-            )
-
+            weak_periods.sort(key=lambda x: x["cost"], reverse=True)
             if weak_periods:
                 add_opportunity(
                     opportunities,
                     "MEDIUM",
                     "SCHEDULE_PERFORMANCE",
                     "Périodes avec dépense sans conversion",
+                    f"{len(weak_periods)} combinaison(s) jour/heure dépassent les seuils.",
                     (
-                        f"{len(weak_periods)} combinaison(s) "
-                        f"jour/heure dépassent les seuils définis."
+                        "Vérifier la répétition sur une période plus longue avant "
+                        "d'ajuster le calendrier de diffusion."
                     ),
-                    (
-                        "Vérifier la répétition de cette tendance sur "
-                        "une période plus longue avant d'ajuster le "
-                        "calendrier de diffusion."
-                    ),
-                    {
-                        "periods": weak_periods[:30]
-                    },
+                    {"periods": weak_periods[:30]},
                 )
 
             audit_coverage["schedule"] = "SUCCESS"
-
         except Exception as error:
             audit_coverage["schedule"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "schedule",
-                    "error": str(error),
-                }
-            )
+            audit_errors.append({"audit": "schedule", "error": str(error)})
 
         # ----------------------------------------------------
-        # 7. PERFORMANCE GÉOGRAPHIQUE
+        # 8. PERFORMANCE GÉOGRAPHIQUE
         # ----------------------------------------------------
-
         try:
             geo_query = f"""
                 SELECT
@@ -6780,99 +6240,53 @@ def optimization_opportunities(
                     metrics.conversions_value
                 FROM geographic_view
                 WHERE campaign.id = {campaign_id}
-                  AND segments.date DURING LAST_30_DAYS
+                  AND {date_filter}
             """
-
-            geo_rows = execute_query(
-    client,
-    customer_id,
-    geo_query
-)
-
+            geo_rows = execute_query(client, customer_id, geo_query)
             weak_locations = []
 
             for row in geo_rows:
-                cost = (
-                    row.metrics.cost_micros
-                    / 1_000_000
-                )
+                item_cost = row.metrics.cost_micros / 1_000_000
+                item_conversions = safe_float(row.metrics.conversions)
+                if row.metrics.clicks >= 10 and item_cost >= 50 and item_conversions == 0:
+                    weak_locations.append({
+                        "country_criterion_id": str(
+                            row.geographic_view.country_criterion_id
+                        ),
+                        "location_type": enum_name(
+                            row.geographic_view.location_type
+                        ),
+                        "region_resource": row.segments.geo_target_region,
+                        "city_resource": row.segments.geo_target_city,
+                        "impressions": row.metrics.impressions,
+                        "clicks": row.metrics.clicks,
+                        "cost": round(item_cost, 2),
+                        "conversions": 0,
+                    })
 
-                conversions = safe_float(
-                    row.metrics.conversions
-                )
-
-                if (
-                    row.metrics.clicks >= 10
-                    and cost >= 50
-                    and conversions == 0
-                ):
-                    weak_locations.append(
-                        {
-                            "country_criterion_id": str(
-                                row.geographic_view
-                                .country_criterion_id
-                            ),
-                            "location_type": enum_name(
-                                row.geographic_view
-                                .location_type
-                            ),
-                            "region_resource": (
-                                row.segments
-                                .geo_target_region
-                            ),
-                            "city_resource": (
-                                row.segments
-                                .geo_target_city
-                            ),
-                            "impressions": (
-                                row.metrics.impressions
-                            ),
-                            "clicks": row.metrics.clicks,
-                            "cost": round(cost, 2),
-                            "conversions": 0,
-                        }
-                    )
-
-            weak_locations.sort(
-                key=lambda item: item["cost"],
-                reverse=True,
-            )
-
+            weak_locations.sort(key=lambda x: x["cost"], reverse=True)
             if weak_locations:
                 add_opportunity(
                     opportunities,
                     "HIGH",
                     "GEO_PERFORMANCE",
                     "Zones géographiques avec dépense sans conversion",
+                    f"{len(weak_locations)} zone(s) dépassent les seuils sans conversion.",
                     (
-                        f"{len(weak_locations)} zone(s) dépassent "
-                        f"les seuils minimums sans conversion."
+                        "Identifier les zones, vérifier leur importance commerciale et "
+                        "envisager une exclusion seulement après validation."
                     ),
-                    (
-                        "Identifier précisément les zones, vérifier "
-                        "leur importance commerciale et envisager une "
-                        "exclusion seulement après validation."
-                    ),
-                    {
-                        "locations": weak_locations[:30]
-                    },
+                    {"locations": weak_locations[:30]},
                 )
 
             audit_coverage["geography"] = "SUCCESS"
-
         except Exception as error:
             audit_coverage["geography"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "geography",
-                    "error": str(error),
-                }
-            )
+            audit_errors.append({"audit": "geography", "error": str(error)})
 
         # ----------------------------------------------------
-        # 8. AUDIENCES EN OBSERVATION
+        # 9. AUDIENCES EN OBSERVATION - ÉTAT ACTUEL, SANS DATE
         # ----------------------------------------------------
-
         try:
             audience_query = f"""
                 SELECT
@@ -6885,44 +6299,21 @@ def optimization_opportunities(
                 WHERE campaign.id = {campaign_id}
                   AND campaign_criterion.status != 'REMOVED'
             """
-
-            audience_rows = execute_query(
-    client,
-    customer_id,
-    audience_query
-)
-
+            audience_rows = execute_query(client, customer_id, audience_query)
             audience_types = {
-                "USER_LIST",
-                "USER_INTEREST",
-                "CUSTOM_AUDIENCE",
-                "COMBINED_AUDIENCE",
-                "LIFE_EVENT",
+                "USER_LIST", "USER_INTEREST", "CUSTOM_AUDIENCE",
+                "COMBINED_AUDIENCE", "LIFE_EVENT"
             }
-
             detected_audiences = []
 
             for row in audience_rows:
-                criterion_type = enum_name(
-                    row.campaign_criterion.type
-                )
-
-                if (
-                    criterion_type in audience_types
-                    and not row.campaign_criterion.negative
-                ):
-                    detected_audiences.append(
-                        {
-                            "criterion_id": str(
-                                row.campaign_criterion
-                                .criterion_id
-                            ),
-                            "type": criterion_type,
-                            "status": enum_name(
-                                row.campaign_criterion.status
-                            ),
-                        }
-                    )
+                criterion_type = enum_name(row.campaign_criterion.type)
+                if criterion_type in audience_types and not row.campaign_criterion.negative:
+                    detected_audiences.append({
+                        "criterion_id": str(row.campaign_criterion.criterion_id),
+                        "type": criterion_type,
+                        "status": enum_name(row.campaign_criterion.status),
+                    })
 
             if not detected_audiences:
                 add_opportunity(
@@ -6930,152 +6321,69 @@ def optimization_opportunities(
                     "LOW",
                     "AUDIENCE_OBSERVATION",
                     "Aucun segment d'audience détecté au niveau campagne",
+                    "L'audit n'a trouvé aucun segment d'audience positif au niveau campagne.",
                     (
-                        "L'audit n'a trouvé aucun segment d'audience "
-                        "positif au niveau de la campagne."
+                        "Évaluer des segments en Observation sans restreindre la diffusion. "
+                        "Vérifier aussi les critères des groupes d'annonces."
                     ),
-                    (
-                        "Évaluer l'ajout de segments en mode "
-                        "Observation pour collecter des données sans "
-                        "restreindre la diffusion. Vérifier également "
-                        "les critères présents au niveau des groupes "
-                        "d'annonces."
-                    ),
-                    {
-                        "campaign_audiences_found": 0,
-                        "scope_checked": "CAMPAIGN",
-                    },
+                    {"campaign_audiences_found": 0, "scope_checked": "CAMPAIGN"},
                 )
 
             audit_coverage["audiences"] = "SUCCESS"
-
         except Exception as error:
             audit_coverage["audiences"] = "FAILED"
-            audit_errors.append(
-                {
-                    "audit": "audiences",
-                    "error": str(error),
-                }
-            )
+            audit_errors.append({"audit": "audiences", "error": str(error)})
 
         # ----------------------------------------------------
-        # CLASSEMENT FINAL
+        # CLASSEMENT ET SYNTHÈSE
         # ----------------------------------------------------
-
-        opportunities.sort(
-            key=lambda item: priority_order(
-                item["priority"]
-            )
-        )
-
-        priority_counts = {
-            "CRITICAL": 0,
-            "HIGH": 0,
-            "MEDIUM": 0,
-            "LOW": 0,
-            "INFO": 0,
-        }
-
+        opportunities.sort(key=lambda x: priority_order(x["priority"]))
+        priority_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
         for opportunity in opportunities:
-            current_priority = opportunity["priority"]
-
-            if current_priority in priority_counts:
-                priority_counts[current_priority] += 1
-
-        # ----------------------------------------------------
-        # SYNTHÈSE EXÉCUTIVE
-        # ----------------------------------------------------
+            priority = opportunity["priority"]
+            if priority in priority_counts:
+                priority_counts[priority] += 1
 
         roas_value = campaign_summary.get("roas")
         cpa_value = campaign_summary.get("cpa")
-
         campaign_health = "HEALTHY"
-
         if roas_value is not None and roas_value >= 10:
             campaign_health = "EXCELLENT"
         elif roas_value is not None and roas_value < 2:
             campaign_health = "AT_RISK"
 
         if roas_value is not None and cpa_value is not None:
-            main_strength = (
-                f"ROAS de {roas_value} et CPA de {cpa_value}"
-            )
+            main_strength = f"ROAS de {roas_value} et CPA de {cpa_value}"
         elif roas_value is not None:
             main_strength = f"ROAS de {roas_value}"
         elif cpa_value is not None:
             main_strength = f"CPA de {cpa_value}"
         else:
-            main_strength = (
-                "Données insuffisantes pour déterminer "
-                "le principal point fort"
-            )
+            main_strength = "Données insuffisantes pour déterminer le principal point fort"
 
         main_risk = "Aucun risque majeur détecté"
         recommended_first_action = "Continuer la surveillance"
         estimated_priority = "LOW"
+        high_items = [x for x in opportunities if x.get("priority") == "HIGH"]
+        medium_items = [x for x in opportunities if x.get("priority") == "MEDIUM"]
 
-        high_priority_opportunities = [
-            opportunity
-            for opportunity in opportunities
-            if opportunity.get("priority") == "HIGH"
-        ]
-
-        medium_priority_opportunities = [
-            opportunity
-            for opportunity in opportunities
-            if opportunity.get("priority") == "MEDIUM"
-        ]
-
-        if high_priority_opportunities:
+        if high_items:
+            first = high_items[0]
             estimated_priority = "HIGH"
-
-            first_priority_opportunity = (
-                high_priority_opportunities[0]
+            main_risk = first.get("title", "Une opportunité prioritaire a été détectée")
+            recommended_first_action = first.get(
+                "recommendation", "Examiner l'opportunité avant toute intervention"
             )
-
-            main_risk = first_priority_opportunity.get(
-                "title",
-                "Une opportunité prioritaire a été détectée",
-            )
-
-            recommended_first_action = (
-                first_priority_opportunity.get(
-                    "recommendation",
-                    (
-                        "Examiner l’opportunité avant "
-                        "toute intervention"
-                    ),
-                )
-            )
-
-        elif medium_priority_opportunities:
+        elif medium_items:
+            first = medium_items[0]
             estimated_priority = "MEDIUM"
-
-            first_priority_opportunity = (
-                medium_priority_opportunities[0]
+            main_risk = first.get(
+                "title", "Une opportunité de priorité moyenne a été détectée"
             )
-
-            main_risk = first_priority_opportunity.get(
-                "title",
-                (
-                    "Une opportunité de priorité moyenne "
-                    "a été détectée"
-                ),
+            recommended_first_action = first.get(
+                "recommendation", "Examiner l'opportunité avant toute intervention"
             )
-
-            recommended_first_action = (
-                first_priority_opportunity.get(
-                    "recommendation",
-                    (
-                        "Examiner l’opportunité avant "
-                        "toute intervention"
-                    ),
-                )
-            )
-
-
-
-
+            
         # ----------------------------------------------------
         # RÉPONSE JSON
         # ----------------------------------------------------
@@ -7085,25 +6393,22 @@ def optimization_opportunities(
             "automatic_action": False,
             "requires_human_confirmation": True,
             "status": "RECOMMENDATION_ONLY",
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "date_range": date_range,
             "campaign": campaign_summary,
             "executive_summary": {
                 "campaign_health": campaign_health,
                 "main_strength": main_strength,
                 "main_risk": main_risk,
-                "recommended_first_action": (
-                    recommended_first_action
-                ),
+                "recommended_first_action": recommended_first_action,
                 "estimated_priority": estimated_priority,
             },
             "summary": {
-                "opportunities_count": len(
-                    opportunities
-                ),
+                "opportunities_count": len(opportunities),
                 "priority_counts": priority_counts,
                 "audits_successful": sum(
-                    1
-                    for value in audit_coverage.values()
-                    if value == "SUCCESS"
+                    1 for value in audit_coverage.values() if value == "SUCCESS"
                 ),
                 "audits_failed": len(audit_errors),
             },
@@ -7111,25 +6416,27 @@ def optimization_opportunities(
             "audit_coverage": audit_coverage,
             "audit_errors": audit_errors,
             "disclaimer": (
-                "Cette analyse ne modifie aucune campagne. "
-                "Chaque recommandation doit être validée par "
-                "une personne qualifiée avant toute application."
+                "Cette analyse ne modifie aucune campagne. Chaque recommandation doit "
+                "être validée par une personne qualifiée avant toute application."
             ),
         }
 
-    except Exception as error:
+    except ValueError as error:
         return {
-            "error": str(error),
+            "status": "FAILED",
             "campaign_id": campaign_id,
             "automatic_action": False,
+            "error": str(error),
+        }
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "campaign_id": campaign_id,
+            "automatic_action": False,
+            "error": str(error),
         }
 
-    except Exception as error:
-        return {
-            "error": str(error),
-            "campaign_id": campaign_id,
-            "automatic_action": False,
-        }
+
 
 
 
