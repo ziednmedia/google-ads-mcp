@@ -351,6 +351,7 @@ def config():
 # get_google_ads_client, execute_query, safe_float, enum_name
 # ============================================================
 
+
 def get_device_performance_data(
     customer_id: str,
     campaign_id: str,
@@ -495,6 +496,16 @@ def get_device_performance_data(
         total_conversion_value += (
             conversion_value
         )
+
+        minimum_conversions_for_cpa: float = Query(
+            default=5.0,
+            ge=0.01,
+            le=100000.0,
+            description=(
+                "Nombre minimum de conversions "
+                "avant d'évaluer le CPA d'un appareil."
+            ),
+        ),
 
         devices.append(
             {
@@ -913,11 +924,11 @@ def device_opportunities(
 
             if (
                 has_sufficient_clicks
-                and high_cpa_threshold
-                is not None
+                and item["conversions"]
+                >= minimum_conversions_for_cpa
+                and high_cpa_threshold is not None
                 and item["cpa"] is not None
-                and item["cpa"]
-                > high_cpa_threshold
+                and item["cpa"] > high_cpa_threshold
             ):
                 opportunity = {
                     **item,
@@ -1172,6 +1183,9 @@ def device_opportunities(
                 ),
                 "high_cpa_multiplier": (
                     high_cpa_multiplier
+                ),
+                "minimum_conversions_for_cpa": (
+                    minimum_conversions_for_cpa
                 ),
                 "low_roas_multiplier": (
                     low_roas_multiplier
