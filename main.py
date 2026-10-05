@@ -4045,6 +4045,213 @@ def search_terms(
             "error": str(error),
         }
 # ============================================================
+# TOP SEARCH TERMS
+# ============================================================
+
+@app.get("/top-search-terms")
+def top_search_terms(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne Google Ads",
+    ),
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+    ),
+    ranking_by: str = Query(
+        default="ROAS",
+        description=(
+            "ROAS | CPA | CONVERSIONS | "
+            "CONVERSION_VALUE | CTR | "
+            "CLICKS | COST | IMPRESSIONS | "
+            "CONVERSION_RATE | AVG_CPC"
+        ),
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+    ),
+):
+    try:
+
+        ranking_by = (
+            ranking_by
+            .upper()
+            .strip()
+        )
+
+        valid_metrics = {
+            "ROAS",
+            "CPA",
+            "CONVERSIONS",
+            "CONVERSION_VALUE",
+            "CTR",
+            "CLICKS",
+            "COST",
+            "IMPRESSIONS",
+            "CONVERSION_RATE",
+            "AVG_CPC",
+        }
+
+        if ranking_by not in valid_metrics:
+
+            return {
+                "status": "FAILED",
+                "error": (
+                    f"ranking_by invalide. "
+                    f"Valeurs acceptées : "
+                    f"{sorted(valid_metrics)}"
+                ),
+            }
+
+        performance = search_terms(
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if (
+            not isinstance(
+                performance,
+                dict,
+            )
+            or performance.get("status")
+            != "SUCCESS"
+        ):
+            return performance
+
+        search_terms_data = (
+            performance.get(
+                "search_terms",
+                [],
+            )
+        )
+
+        metric_field = {
+            "ROAS": "roas",
+            "CPA": "cpa",
+            "CONVERSIONS": (
+                "conversions"
+            ),
+            "CONVERSION_VALUE": (
+                "conversion_value"
+            ),
+            "CTR": (
+                "ctr_percent"
+            ),
+            "CLICKS": (
+                "clicks"
+            ),
+            "COST": (
+                "cost"
+            ),
+            "IMPRESSIONS": (
+                "impressions"
+            ),
+            "CONVERSION_RATE": (
+                "conversion_rate_percent"
+            ),
+            "AVG_CPC": (
+                "average_cpc"
+            ),
+        }
+
+        metric_name = (
+            metric_field[
+                ranking_by
+            ]
+        )
+
+        ranked_search_terms = [
+            item
+            for item in search_terms_data
+            if item.get(
+                metric_name
+            ) is not None
+        ]
+
+        reverse_sort = (
+            ranking_by != "CPA"
+        )
+
+        ranked_search_terms.sort(
+            key=lambda item:
+                item[
+                    metric_name
+                ],
+            reverse=reverse_sort,
+        )
+
+        return {
+            "status": "SUCCESS",
+
+            "customer_id":
+                customer_id,
+
+            "campaign_id":
+                campaign_id,
+
+            "campaign_name":
+                performance.get(
+                    "campaign_name"
+                ),
+
+            "date_range":
+                performance.get(
+                    "date_range"
+                ),
+
+            "summary": {
+
+                "total_search_terms":
+                    len(
+                        search_terms_data
+                    ),
+
+                "ranked_search_terms":
+                    len(
+                        ranked_search_terms
+                    ),
+
+                "limit":
+                    limit,
+
+                "ranking_by":
+                    ranking_by,
+            },
+
+            "top_search_terms":
+                ranked_search_terms[
+                    :limit
+                ],
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+# ============================================================
 # SEARCH TERM OPPORTUNITIES V2
 # Analyse en lecture seule des termes de recherche
 # Prend en compte le statut Ajouté / Exclu
