@@ -2230,11 +2230,31 @@ def campaign_performance(
 
 @app.get("/top-campaigns")
 def top_campaigns(
-    limit: int = Query(default=10, ge=1, le=50),
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=50,
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+    ),
 ):
-    performance = campaign_performance()
+    performance = campaign_performance(
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
-    if isinstance(performance, dict) and "error" in performance:
+    if (
+        isinstance(performance, dict)
+        and "error" in performance
+    ):
         return performance
 
     campaigns_with_roas = [
@@ -2248,7 +2268,14 @@ def top_campaigns(
         reverse=True,
     )
 
-    return campaigns_with_roas[:limit]
+    return {
+        "date_range": {
+            "period": period,
+            "start_date": start_date,
+            "end_date": end_date,
+        },
+        "campaigns": campaigns_with_roas[:limit],
+    }
 
 
 # ============================================================
