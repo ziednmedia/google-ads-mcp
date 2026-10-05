@@ -2015,22 +2015,61 @@ query
     except Exception as error:
         return {"error": str(error)}
 
-
 # ============================================================
 # PERFORMANCE DES CAMPAGNES
 # ============================================================
 
 @app.get("/campaign-performance")
 def campaign_performance(
-customer_id: str
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie."
+        ),
+    ),
+
+    start_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de début personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
+
+    end_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de fin personnalisée "
+            "au format YYYY-MM-DD."
+        ),
+    ),
 ):
     try:
-        client = get_google_ads_client()
+
         customer_id = normalize_customer_id(
-                customer_id
+            customer_id
         )
 
-        query = """
+        date_configuration = (
+            build_date_filter(
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
+        date_filter = (
+            date_configuration["filter"]
+        )
+
+        client = get_google_ads_client()
+
+        query = f"""
             SELECT
                 campaign.id,
                 campaign.name,
@@ -2042,63 +2081,149 @@ customer_id: str
                 metrics.conversions,
                 metrics.conversions_value
             FROM campaign
-            WHERE segments.date DURING LAST_30_DAYS
+            WHERE {date_filter}
         """
 
         response = execute_query(
-client,
-customer_id,
-query
-)
+            client,
+            customer_id,
+            query,
+        )
 
         data = []
 
         for row in response:
-            cost = row.metrics.cost_micros / 1_000_000
-            conversions = safe_float(row.metrics.conversions)
+
+            cost = (
+                row.metrics.cost_micros
+                / 1_000_000
+            )
+
+            conversions = safe_float(
+                row.metrics.conversions
+            )
+
             conversion_value = safe_float(
                 row.metrics.conversions_value
             )
 
             cpa = (
-                round(cost / conversions, 2)
+                round(
+                    cost / conversions,
+                    2,
+                )
                 if conversions > 0
                 else None
             )
 
             roas = (
-                round(conversion_value / cost, 2)
+                round(
+                    conversion_value / cost,
+                    2,
+                )
                 if cost > 0
                 else None
             )
 
             data.append(
                 {
-                    "campaign_id": str(row.campaign.id),
-                    "campaign_name": row.campaign.name,
-                    "status": enum_name(row.campaign.status),
-                    "impressions": row.metrics.impressions,
-                    "clicks": row.metrics.clicks,
+                    "campaign_id": str(
+                        row.campaign.id
+                    ),
+
+                    "campaign_name": (
+                        row.campaign.name
+                    ),
+
+                    "status": enum_name(
+                        row.campaign.status
+                    ),
+
+                    "impressions": (
+                        row.metrics.impressions
+                    ),
+
+                    "clicks": (
+                        row.metrics.clicks
+                    ),
+
                     "ctr": round(
-                        safe_float(row.metrics.ctr) * 100,
+                        safe_float(
+                            row.metrics.ctr
+                        )
+                        * 100,
                         2,
                     ),
-                    "cost": round(cost, 2),
-                    "conversions": round(conversions, 2),
+
+                    "cost": round(
+                        cost,
+                        2,
+                    ),
+
+                    "conversions": round(
+                        conversions,
+                        2,
+                    ),
+
                     "conversion_value": round(
                         conversion_value,
                         2,
                     ),
+
                     "cpa": cpa,
+
                     "roas": roas,
                 }
             )
 
-        return data
+        return {
+            "status": "SUCCESS",
+
+            "customer_id": customer_id,
+
+            "date_range": {
+                "mode": (
+                    date_configuration["mode"]
+                ),
+
+                "period": (
+                    date_configuration["period"]
+                ),
+
+                "start_date": (
+                    date_configuration[
+                        "start_date"
+                    ]
+                ),
+
+                "end_date": (
+                    date_configuration[
+                        "end_date"
+                    ]
+                ),
+            },
+
+            "campaigns_count": len(
+                data
+            ),
+
+            "campaigns": data,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
 
     except Exception as error:
-        return {"error": str(error)}
 
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+`
 
 # ============================================================
 # TOP CAMPAGNES
@@ -7006,6 +7131,8 @@ def optimization_opportunities(
             "campaign_id": campaign_id,
             "automatic_action": False,
         }
+
+
 
             
  
