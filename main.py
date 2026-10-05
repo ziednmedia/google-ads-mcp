@@ -793,6 +793,16 @@ def device_opportunities(
             "dépense sans conversion."
         ),
     ),
+    minimum_conversions_for_cpa: float = Query(
+        default=5.0,
+        ge=0.01,
+        le=100000.0,
+        description=(
+            "Nombre minimum de conversions "
+            "avant d'évaluer le CPA "
+            "d'un appareil."
+        ),
+    ),
     high_cpa_multiplier: float = Query(
         default=1.5,
         ge=1.0,
@@ -926,9 +936,11 @@ def device_opportunities(
                 has_sufficient_clicks
                 and item["conversions"]
                 >= minimum_conversions_for_cpa
-                and high_cpa_threshold is not None
+                and high_cpa_threshold
+                is not None
                 and item["cpa"] is not None
-                and item["cpa"] > high_cpa_threshold
+                and item["cpa"]
+                > high_cpa_threshold
             ):
                 opportunity = {
                     **item,
@@ -1174,6 +1186,7 @@ def device_opportunities(
             "date_range": (
                 performance["date_range"]
             ),
+
             "thresholds": {
                 "minimum_clicks": (
                     minimum_clicks
@@ -1181,11 +1194,11 @@ def device_opportunities(
                 "minimum_cost": (
                     minimum_cost
                 ),
-                "high_cpa_multiplier": (
-                    high_cpa_multiplier
-                ),
                 "minimum_conversions_for_cpa": (
                     minimum_conversions_for_cpa
+                ),
+                "high_cpa_multiplier": (
+                    high_cpa_multiplier
                 ),
                 "low_roas_multiplier": (
                     low_roas_multiplier
@@ -1221,6 +1234,7 @@ def device_opportunities(
                     else None
                 ),
             },
+            
             "campaign_summary": summary,
             "executive_summary": {
                 "main_risk": main_risk,
