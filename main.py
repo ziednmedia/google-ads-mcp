@@ -2284,16 +2284,53 @@ def top_campaigns(
 
 @app.get("/keywords")
 def keywords(
-customer_id: str
+    customer_id: str,
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description="Période Google Ads prédéfinie",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description="Date de début YYYY-MM-DD",
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description="Date de fin YYYY-MM-DD",
+    ),
 ):
     try:
         client = get_google_ads_client()
 
         customer_id = normalize_customer_id(
-                customer_id
+            customer_id
         )
 
-        query = """
+        date_configuration = build_date_filter(
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        date_filter = (
+            date_configuration["filter"]
+        )
+
+        date_range = {
+            "mode": (
+                date_configuration["mode"]
+            ),
+            "period": (
+                date_configuration["period"]
+            ),
+            "start_date": (
+                date_configuration["start_date"]
+            ),
+            "end_date": (
+                date_configuration["end_date"]
+            ),
+        }
+
+        query = f"""
             SELECT
                 campaign.id,
                 campaign.name,
@@ -2306,65 +2343,164 @@ customer_id: str
                 metrics.impressions,
                 metrics.clicks,
                 metrics.ctr,
+                metrics.average_cpc,
                 metrics.cost_micros,
-                metrics.conversions
+                metrics.conversions,
+                metrics.conversions_value,
+                metrics.conversions_from_interactions_rate
             FROM keyword_view
-            WHERE segments.date DURING LAST_30_DAYS
+            WHERE ad_group_criterion.status != 'REMOVED'
+              AND {date_filter}
         """
 
         response = execute_query(
-    client,
-    customer_id,
-    query
-)
+            client,
+            customer_id,
+            query,
+        )
 
         data = []
 
         for row in response:
-            cost = row.metrics.cost_micros / 1_000_000
-            conversions = safe_float(row.metrics.conversions)
+
+            cost = (
+                row.metrics.cost_micros
+                / 1_000_000
+            )
+
+            conversions = safe_float(
+                row.metrics.conversions
+            )
+
+            conversion_value = safe_float(
+                row.metrics.conversions_value
+            )
+
+            average_cpc = (
+                row.metrics.average_cpc
+                / 1_000_000
+            )
+
+            ctr = (
+                safe_float(
+                    row.metrics.ctr
+                )
+                * 100
+            )
+
+            conversion_rate = (
+                safe_float(
+                    row.metrics
+                    .conversions_from_interactions_rate
+                )
+                * 100
+            )
 
             cpa = (
-                round(cost / conversions, 2)
+                round(
+                    cost / conversions,
+                    2,
+                )
                 if conversions > 0
+                else None
+            )
+
+            roas = (
+                round(
+                    conversion_value / cost,
+                    2,
+                )
+                if cost > 0
                 else None
             )
 
             data.append(
                 {
-                    "campaign_id": str(row.campaign.id),
-                    "campaign": row.campaign.name,
-                    "ad_group_id": str(row.ad_group.id),
-                    "ad_group": row.ad_group.name,
+                    "campaign_id": str(
+                        row.campaign.id
+                    ),
+                    "campaign": (
+                        row.campaign.name
+                    ),
+                    "ad_group_id": str(
+                        row.ad_group.id
+                    ),
+                    "ad_group": (
+                        row.ad_group.name
+                    ),
                     "criterion_id": str(
-                        row.ad_group_criterion.criterion_id
+                        row.ad_group_criterion
+                        .criterion_id
                     ),
                     "keyword": (
-                        row.ad_group_criterion.keyword.text
+                        row.ad_group_criterion
+                        .keyword
+                        .text
                     ),
                     "match_type": enum_name(
                         row.ad_group_criterion
-                        .keyword.match_type
+                        .keyword
+                        .match_type
                     ),
                     "status": enum_name(
-                        row.ad_group_criterion.status
+                        row.ad_group_criterion
+                        .status
                     ),
-                    "impressions": row.metrics.impressions,
-                    "clicks": row.metrics.clicks,
-                    "ctr": round(
-                        safe_float(row.metrics.ctr) * 100,
+                    "impressions": (
+                        row.metrics.impressions
+                    ),
+                    "clicks": (
+                        row.metrics.clicks
+                    ),
+                    "ctr_percent": round(
+                        ctr,
                         2,
                     ),
-                    "cost": round(cost, 2),
-                    "conversions": round(conversions, 2),
+                    "average_cpc": round(
+                        average_cpc,
+                        2,
+                    ),
+                    "cost": round(
+                        cost,
+                        2,
+                    ),
+                    "conversions": round(
+                        conversions,
+                        2,
+                    ),
+                    "conversion_rate_percent": round(
+                        conversion_rate,
+                        2,
+                    ),
+                    "conversion_value": round(
+                        conversion_value,
+                        2,
+                    ),
                     "cpa": cpa,
+                    "roas": roas,
                 }
             )
 
-        return data
+        return {
+            "customer_id": customer_id,
+            "date_range": date_range,
+            "total_keywords": len(data),
+            "keywords": data,
+        }
+
+    except ValueError as error:
+        return {
+            "error": str(error),
+            "customer_id": customer_id,
+        }
 
     except Exception as error:
-        return {"error": str(error)}
+        return {
+            "error": str(error),
+            "customer_id": customer_id,
+        }
+
+
 
 
 # ============================================================
