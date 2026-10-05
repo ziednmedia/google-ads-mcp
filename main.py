@@ -2277,11 +2277,9 @@ def top_campaigns(
         "campaigns": campaigns_with_roas[:limit],
     }
 
-
 # ============================================================
 # MOTS-CLÉS
 # ============================================================
-
 @app.get("/keywords")
 def keywords(
     customer_id: str,
@@ -2499,10 +2497,6 @@ def keywords(
             "error": str(error),
             "customer_id": customer_id,
         }
-
-
-
-
 # ============================================================
 # SEARCH TERMS
 # ============================================================
