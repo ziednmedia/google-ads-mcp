@@ -5980,7 +5980,767 @@ def optimization_opportunities(
             audit_errors.append({"audit": "keyword_quality", "error": str(error)})
 
         # ----------------------------------------------------
-        # 4. ANNONCES RSA - ÉTAT ACTUEL, SANS DATE
+        # 4. PERFORMANCE DÉTAILLÉE DES MOTS-CLÉS
+        # ----------------------------------------------------
+
+        try:
+            keyword_performance_query = f"""
+                SELECT
+                    campaign.id,
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group_criterion.criterion_id,
+                    ad_group_criterion.status,
+                    ad_group_criterion.keyword.text,
+                    ad_group_criterion.keyword.match_type,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.ctr,
+                    metrics.average_cpc,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value,
+                    metrics.conversions_from_interactions_rate
+                FROM keyword_view
+                WHERE campaign.id = {campaign_id}
+                  AND ad_group_criterion.status != 'REMOVED'
+                  AND {date_filter}
+                ORDER BY metrics.cost_micros DESC
+            """
+
+            keyword_performance_rows = (
+                execute_query(
+                    client,
+                    customer_id,
+                    keyword_performance_query,
+                )
+            )
+
+            keyword_performance = []
+
+            for row in keyword_performance_rows:
+                keyword_cost = (
+                    row.metrics.cost_micros
+                    / 1_000_000
+                )
+
+                keyword_conversions = safe_float(
+                    row.metrics.conversions
+                )
+
+                keyword_value = safe_float(
+                    row.metrics.conversions_value
+                )
+
+                keyword_ctr = (
+                    safe_float(
+                        row.metrics.ctr
+                    )
+                    * 100
+                )
+
+                keyword_average_cpc = (
+                    row.metrics.average_cpc
+                    / 1_000_000
+                )
+
+                keyword_conversion_rate = (
+                    safe_float(
+                        row.metrics
+                        .conversions_from_interactions_rate
+                    )
+                    * 100
+                )
+
+                keyword_cpa = (
+                    keyword_cost
+                    / keyword_conversions
+                    if keyword_conversions > 0
+                    else None
+                )
+
+                keyword_roas = (
+                    keyword_value
+                    / keyword_cost
+                    if keyword_cost > 0
+                    else None
+                )
+
+                keyword_performance.append(
+                    {
+                        "ad_group_id": str(
+                            row.ad_group.id
+                        ),
+                        "ad_group_name": (
+                            row.ad_group.name
+                        ),
+                        "criterion_id": str(
+                            row.ad_group_criterion
+                            .criterion_id
+                        ),
+                        "status": enum_name(
+                            row.ad_group_criterion
+                            .status
+                        ),
+                        "keyword": (
+                            row.ad_group_criterion
+                            .keyword
+                            .text
+                        ),
+                        "match_type": enum_name(
+                            row.ad_group_criterion
+                            .keyword
+                            .match_type
+                        ),
+                        "impressions": (
+                            row.metrics.impressions
+                        ),
+                        "clicks": (
+                            row.metrics.clicks
+                        ),
+                        "ctr_percent": round(
+                            keyword_ctr,
+                            2,
+                        ),
+                        "average_cpc": round(
+                            keyword_average_cpc,
+                            2,
+                        ),
+                        "cost": round(
+                            keyword_cost,
+                            2,
+                        ),
+                        "conversions": round(
+                            keyword_conversions,
+                            2,
+                        ),
+                        "conversion_rate_percent": (
+                            round(
+                                keyword_conversion_rate,
+                                2,
+                            )
+                        ),
+                        "conversion_value": round(
+                            keyword_value,
+                            2,
+                        ),
+                        "cpa": (
+                            round(
+                                keyword_cpa,
+                                2,
+                            )
+                            if keyword_cpa
+                            is not None
+                            else None
+                        ),
+                        "roas": (
+                            round(
+                                keyword_roas,
+                                2,
+                            )
+                            if keyword_roas
+                            is not None
+                            else None
+                        ),
+                    }
+                )
+
+            eligible_keywords = [
+                item
+                for item
+                in keyword_performance
+                if item["clicks"] >= 5
+            ]
+
+            converting_keywords = [
+                item
+                for item
+                in eligible_keywords
+                if item["conversions"] > 0
+            ]
+
+            keywords_without_conversions = [
+                item
+                for item
+                in eligible_keywords
+                if (
+                    item["cost"] >= 10
+                    and item["conversions"] == 0
+                )
+            ]
+
+            low_ctr_keywords = [
+                item
+                for item
+                in keyword_performance
+                if (
+                    item["impressions"] >= 100
+                    and item["ctr_percent"] < 2
+                )
+            ]
+
+            expensive_keywords = [
+                item
+                for item
+                in converting_keywords
+                if (
+                    cpa is not None
+                    and item["cpa"] is not None
+                    and item["cpa"] >= cpa * 1.5
+                )
+            ]
+
+            best_keyword_by_cpa = None
+            worst_keyword_by_cpa = None
+            best_keyword_by_roas = None
+            best_keyword_by_conversions = None
+
+            if converting_keywords:
+                best_keyword_by_cpa = min(
+                    converting_keywords,
+                    key=lambda item: (
+                        item["cpa"]
+                    ),
+                )
+
+                worst_keyword_by_cpa = max(
+                    converting_keywords,
+                    key=lambda item: (
+                        item["cpa"]
+                    ),
+                )
+
+                best_keyword_by_conversions = max(
+                    converting_keywords,
+                    key=lambda item: (
+                        item["conversions"]
+                    ),
+                )
+
+                keywords_with_roas = [
+                    item
+                    for item
+                    in converting_keywords
+                    if item["roas"] is not None
+                ]
+
+                if keywords_with_roas:
+                    best_keyword_by_roas = max(
+                        keywords_with_roas,
+                        key=lambda item: (
+                            item["roas"]
+                        ),
+                    )
+
+            campaign_summary[
+                "keyword_performance_analysis"
+            ] = {
+                "keywords_analyzed": len(
+                    keyword_performance
+                ),
+                "keywords_with_sufficient_data": (
+                    len(
+                        eligible_keywords
+                    )
+                ),
+                "best_by_cpa": (
+                    best_keyword_by_cpa
+                ),
+                "worst_by_cpa": (
+                    worst_keyword_by_cpa
+                ),
+                "best_by_roas": (
+                    best_keyword_by_roas
+                ),
+                "best_by_conversion_volume": (
+                    best_keyword_by_conversions
+                ),
+                "keywords_spending_without_conversions": (
+                    keywords_without_conversions[:25]
+                ),
+                "keywords_above_campaign_cpa": (
+                    expensive_keywords[:25]
+                ),
+                "low_ctr_keywords": (
+                    low_ctr_keywords[:25]
+                ),
+                "performance": (
+                    keyword_performance[:100]
+                ),
+            }
+
+            if keywords_without_conversions:
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "KEYWORD_PERFORMANCE",
+                    (
+                        "Mots-clés avec dépense "
+                        "sans conversion"
+                    ),
+                    (
+                        f"{len(keywords_without_conversions)} "
+                        f"mot(s)-clé(s) ont au moins "
+                        f"5 clics et 10 $ de coût "
+                        f"sans conversion."
+                    ),
+                    (
+                        "Analyser les termes de recherche, "
+                        "le type de correspondance, "
+                        "l'annonce et la page de destination. "
+                        "Ne pas suspendre automatiquement "
+                        "ces mots-clés."
+                    ),
+                    {
+                        "keywords": (
+                            keywords_without_conversions[
+                                :25
+                            ]
+                        ),
+                    },
+                )
+
+            if expensive_keywords:
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "KEYWORD_HIGH_CPA",
+                    (
+                        "Mots-clés avec un CPA "
+                        "supérieur à la campagne"
+                    ),
+                    (
+                        f"{len(expensive_keywords)} "
+                        f"mot(s)-clé(s) ont un CPA "
+                        f"d'au moins 1,5 fois le CPA "
+                        f"de la campagne."
+                    ),
+                    (
+                        "Comparer l'intention, le type "
+                        "de correspondance, le Quality "
+                        "Score, les termes de recherche "
+                        "et la page de destination."
+                    ),
+                    {
+                        "campaign_cpa": cpa,
+                        "keywords": (
+                            expensive_keywords[:25]
+                        ),
+                    },
+                )
+
+            if low_ctr_keywords:
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "KEYWORD_LOW_CTR",
+                    (
+                        "Mots-clés avec un CTR faible"
+                    ),
+                    (
+                        f"{len(low_ctr_keywords)} "
+                        f"mot(s)-clé(s) ont au moins "
+                        f"100 impressions et un CTR "
+                        f"inférieur à 2 %."
+                    ),
+                    (
+                        "Vérifier la pertinence du "
+                        "mot-clé, le type de "
+                        "correspondance, l'annonce "
+                        "associée et l'intention de "
+                        "recherche."
+                    ),
+                    {
+                        "keywords": (
+                            low_ctr_keywords[:25]
+                        ),
+                    },
+                )
+
+            audit_coverage[
+                "keyword_performance"
+            ] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage[
+                "keyword_performance"
+            ] = "FAILED"
+
+            audit_errors.append(
+                {
+                    "audit": (
+                        "keyword_performance"
+                    ),
+                    "error": str(error),
+                }
+            )
+
+
+        # ----------------------------------------------------
+        # 5. PERFORMANCE DES ANNONCES
+        # ----------------------------------------------------
+
+        try:
+            ad_performance_query = f"""
+                SELECT
+                    campaign.id,
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group_ad.ad.id,
+                    ad_group_ad.status,
+                    ad_group_ad.ad.type,
+                    ad_group_ad.ad_strength,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.ctr,
+                    metrics.average_cpc,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.conversions_value,
+                    metrics.conversions_from_interactions_rate
+                FROM ad_group_ad
+                WHERE campaign.id = {campaign_id}
+                  AND ad_group_ad.status != 'REMOVED'
+                  AND {date_filter}
+                ORDER BY metrics.cost_micros DESC
+            """
+
+            ad_rows = execute_query(
+                client,
+                customer_id,
+                ad_performance_query,
+            )
+
+            ad_performance = []
+
+            for row in ad_rows:
+                ad_cost = (
+                    row.metrics.cost_micros
+                    / 1_000_000
+                )
+
+                ad_conversions = safe_float(
+                    row.metrics.conversions
+                )
+
+                ad_conversion_value = safe_float(
+                    row.metrics.conversions_value
+                )
+
+                ad_ctr = (
+                    safe_float(
+                        row.metrics.ctr
+                    )
+                    * 100
+                )
+
+                ad_average_cpc = (
+                    row.metrics.average_cpc
+                    / 1_000_000
+                )
+
+                ad_conversion_rate = (
+                    safe_float(
+                        row.metrics
+                        .conversions_from_interactions_rate
+                    )
+                    * 100
+                )
+
+                ad_cpa = (
+                    ad_cost / ad_conversions
+                    if ad_conversions > 0
+                    else None
+                )
+
+                ad_roas = (
+                    ad_conversion_value / ad_cost
+                    if ad_cost > 0
+                    else None
+                )
+
+                ad_performance.append(
+                    {
+                        "ad_group_id": str(
+                            row.ad_group.id
+                        ),
+                        "ad_group_name": (
+                            row.ad_group.name
+                        ),
+                        "ad_id": str(
+                            row.ad_group_ad.ad.id
+                        ),
+                        "status": enum_name(
+                            row.ad_group_ad.status
+                        ),
+                        "ad_type": enum_name(
+                            row.ad_group_ad
+                            .ad
+                            .type
+                        ),
+                        "ad_strength": enum_name(
+                            row.ad_group_ad
+                            .ad_strength
+                        ),
+                        "impressions": (
+                            row.metrics.impressions
+                        ),
+                        "clicks": (
+                            row.metrics.clicks
+                        ),
+                        "ctr_percent": round(
+                            ad_ctr,
+                            2,
+                        ),
+                        "average_cpc": round(
+                            ad_average_cpc,
+                            2,
+                        ),
+                        "cost": round(
+                            ad_cost,
+                            2,
+                        ),
+                        "conversions": round(
+                            ad_conversions,
+                            2,
+                        ),
+                        "conversion_rate_percent": (
+                            round(
+                                ad_conversion_rate,
+                                2,
+                            )
+                        ),
+                        "conversion_value": round(
+                            ad_conversion_value,
+                            2,
+                        ),
+                        "cpa": (
+                            round(ad_cpa, 2)
+                            if ad_cpa is not None
+                            else None
+                        ),
+                        "roas": (
+                            round(ad_roas, 2)
+                            if ad_roas is not None
+                            else None
+                        ),
+                    }
+                )
+
+            eligible_ads = [
+                item
+                for item in ad_performance
+                if item["clicks"] >= 5
+            ]
+
+            converting_ads = [
+                item
+                for item in eligible_ads
+                if item["conversions"] > 0
+            ]
+
+            ads_without_conversions = [
+                item
+                for item in eligible_ads
+                if (
+                    item["cost"] >= 10
+                    and item["conversions"] == 0
+                )
+            ]
+
+            low_ctr_ads = [
+                item
+                for item in ad_performance
+                if (
+                    item["impressions"] >= 100
+                    and item["ctr_percent"] < 2
+                )
+            ]
+
+            best_ad_by_cpa = None
+            worst_ad_by_cpa = None
+            best_ad_by_roas = None
+            best_ad_by_conversions = None
+
+            if converting_ads:
+                best_ad_by_cpa = min(
+                    converting_ads,
+                    key=lambda item: (
+                        item["cpa"]
+                    ),
+                )
+
+                worst_ad_by_cpa = max(
+                    converting_ads,
+                    key=lambda item: (
+                        item["cpa"]
+                    ),
+                )
+
+                best_ad_by_conversions = max(
+                    converting_ads,
+                    key=lambda item: (
+                        item["conversions"]
+                    ),
+                )
+
+                ads_with_roas = [
+                    item
+                    for item in converting_ads
+                    if item["roas"] is not None
+                ]
+
+                if ads_with_roas:
+                    best_ad_by_roas = max(
+                        ads_with_roas,
+                        key=lambda item: (
+                            item["roas"]
+                        ),
+                    )
+
+            campaign_summary[
+                "ad_performance_analysis"
+            ] = {
+                "ads_analyzed": len(
+                    ad_performance
+                ),
+                "ads_with_sufficient_data": len(
+                    eligible_ads
+                ),
+                "best_by_cpa": (
+                    best_ad_by_cpa
+                ),
+                "worst_by_cpa": (
+                    worst_ad_by_cpa
+                ),
+                "best_by_roas": (
+                    best_ad_by_roas
+                ),
+                "best_by_conversion_volume": (
+                    best_ad_by_conversions
+                ),
+                "ads_spending_without_conversions": (
+                    ads_without_conversions[:25]
+                ),
+                "low_ctr_ads": (
+                    low_ctr_ads[:25]
+                ),
+                "performance": (
+                    ad_performance[:100]
+                ),
+            }
+
+            if ads_without_conversions:
+                add_opportunity(
+                    opportunities,
+                    "HIGH",
+                    "AD_PERFORMANCE",
+                    (
+                        "Annonces avec dépense "
+                        "sans conversion"
+                    ),
+                    (
+                        f"{len(ads_without_conversions)} "
+                        f"annonce(s) ont au moins "
+                        f"5 clics et 10 $ de coût "
+                        f"sans conversion."
+                    ),
+                    (
+                        "Comparer les messages, les "
+                        "titres, les descriptions et "
+                        "les pages de destination. "
+                        "Ne pas suspendre automatiquement "
+                        "une annonce."
+                    ),
+                    {
+                        "ads": (
+                            ads_without_conversions[:25]
+                        ),
+                    },
+                )
+
+            if low_ctr_ads:
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "AD_LOW_CTR",
+                    (
+                        "Annonces avec un CTR faible"
+                    ),
+                    (
+                        f"{len(low_ctr_ads)} annonce(s) "
+                        f"ont au moins 100 impressions "
+                        f"et un CTR inférieur à 2 %."
+                    ),
+                    (
+                        "Réviser la pertinence du "
+                        "message, les titres, les "
+                        "descriptions et l'alignement "
+                        "avec les mots-clés du groupe."
+                    ),
+                    {
+                        "ads": low_ctr_ads[:25],
+                    },
+                )
+
+            if (
+                best_ad_by_cpa is not None
+                and worst_ad_by_cpa is not None
+                and best_ad_by_cpa["ad_id"]
+                != worst_ad_by_cpa["ad_id"]
+                and worst_ad_by_cpa["cpa"]
+                >= best_ad_by_cpa["cpa"] * 1.5
+            ):
+                add_opportunity(
+                    opportunities,
+                    "MEDIUM",
+                    "AD_CPA_GAP",
+                    (
+                        "Écart important de CPA "
+                        "entre les annonces"
+                    ),
+                    (
+                        f"L'annonce "
+                        f"{best_ad_by_cpa['ad_id']} "
+                        f"obtient un CPA de "
+                        f"{best_ad_by_cpa['cpa']}, "
+                        f"tandis que l'annonce "
+                        f"{worst_ad_by_cpa['ad_id']} "
+                        f"obtient un CPA de "
+                        f"{worst_ad_by_cpa['cpa']}."
+                    ),
+                    (
+                        "Comparer les variantes avant "
+                        "toute décision. Vérifier le "
+                        "volume, la durée de diffusion "
+                        "et la fiabilité de l'écart."
+                    ),
+                    {
+                        "best_ad": best_ad_by_cpa,
+                        "weakest_ad": (
+                            worst_ad_by_cpa
+                        ),
+                    },
+                )
+
+            audit_coverage[
+                "ad_performance"
+            ] = "SUCCESS"
+
+        except Exception as error:
+            audit_coverage[
+                "ad_performance"
+            ] = "FAILED"
+
+            audit_errors.append(
+                {
+                    "audit": "ad_performance",
+                    "error": str(error),
+                }
+            )
+
+        # ----------------------------------------------------
+        # 6. ANNONCES RSA - ÉTAT ACTUEL, SANS DATE
         # ----------------------------------------------------
         try:
             rsa_query = f"""
@@ -6061,7 +6821,7 @@ def optimization_opportunities(
             audit_errors.append({"audit": "rsa", "error": str(error)})
 
         # ----------------------------------------------------
-        # 5. ASSETS DE CAMPAGNE - ÉTAT ACTUEL, SANS DATE
+        # 7. ASSETS DE CAMPAGNE - ÉTAT ACTUEL, SANS DATE
         # ----------------------------------------------------
         try:
             asset_query = f"""
@@ -6109,7 +6869,7 @@ def optimization_opportunities(
             audit_errors.append({"audit": "campaign_assets", "error": str(error)})
 
         # ----------------------------------------------------
-        # 6. TERMES DE RECHERCHE SANS CONVERSION
+        # 8. TERMES DE RECHERCHE SANS CONVERSION
         # ----------------------------------------------------
         try:
             search_term_query = f"""
@@ -6169,7 +6929,7 @@ def optimization_opportunities(
             audit_errors.append({"audit": "search_terms", "error": str(error)})
 
         # ----------------------------------------------------
-        # 7. PERFORMANCE PAR JOUR ET HEURE
+        # 9. PERFORMANCE PAR JOUR ET HEURE
         # ----------------------------------------------------
         try:
             schedule_query = f"""
@@ -6223,7 +6983,7 @@ def optimization_opportunities(
             audit_errors.append({"audit": "schedule", "error": str(error)})
 
         # ----------------------------------------------------
-        # 8. PERFORMANCE GÉOGRAPHIQUE
+        # 10. PERFORMANCE GÉOGRAPHIQUE
         # ----------------------------------------------------
         try:
             geo_query = f"""
@@ -6285,7 +7045,7 @@ def optimization_opportunities(
             audit_errors.append({"audit": "geography", "error": str(error)})
 
         # ----------------------------------------------------
-        # 9. AUDIENCES EN OBSERVATION - ÉTAT ACTUEL, SANS DATE
+        # 11. AUDIENCES EN OBSERVATION - ÉTAT ACTUEL, SANS DATE
         # ----------------------------------------------------
         try:
             audience_query = f"""
