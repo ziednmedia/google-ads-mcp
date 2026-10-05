@@ -2223,7 +2223,6 @@ def campaign_performance(
             "status": "FAILED",
             "error": str(error),
         }
-`
 
 # ============================================================
 # TOP CAMPAGNES
