@@ -1281,6 +1281,767 @@ def device_opportunities(
             "error": str(error),
         }
 
+# ============================================================
+# NETWORK PERFORMANCE + NETWORK OPPORTUNITIES
+# Lecture seule, périodes dynamiques, aucune action automatique
+# Dépendances existantes : Query, Optional, build_date_filter,
+# normalize_customer_id, get_google_ads_client, execute_query,
+# safe_float et enum_name
+# ============================================================
+
+
+def get_network_performance_data(
+    customer_id: str,
+    campaign_id: str,
+    period: str = "LAST_30_DAYS",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """Fonction interne partagée par les deux endpoints."""
+
+    customer_id = normalize_customer_id(customer_id)
+    campaign_id = campaign_id.replace("-", "").strip()
+
+    if not campaign_id.isdigit():
+        raise ValueError(
+            "campaign_id doit contenir uniquement des chiffres."
+        )
+
+    date_configuration = build_date_filter(
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    date_filter = date_configuration["filter"]
+    date_range = {
+        "mode": date_configuration["mode"],
+        "period": date_configuration["period"],
+        "start_date": date_configuration["start_date"],
+        "end_date": date_configuration["end_date"],
+    }
+
+    client = get_google_ads_client()
+
+    query = f"""
+        SELECT
+            campaign.id,
+            campaign.name,
+            campaign.status,
+            segments.ad_network_type,
+            metrics.impressions,
+            metrics.clicks,
+            metrics.ctr,
+            metrics.average_cpc,
+            metrics.cost_micros,
+            metrics.conversions,
+            metrics.conversions_value,
+            metrics.conversions_from_interactions_rate
+        FROM campaign
+        WHERE campaign.id = {campaign_id}
+          AND {date_filter}
+        ORDER BY metrics.cost_micros DESC
+    """
+
+    response = execute_query(
+        client,
+        customer_id,
+        query,
+    )
+
+    networks = []
+    campaign_name = ""
+    campaign_status = ""
+    total_impressions = 0
+    total_clicks = 0
+    total_cost = 0.0
+    total_conversions = 0.0
+    total_conversion_value = 0.0
+
+    for row in response:
+        campaign_name = row.campaign.name
+        campaign_status = enum_name(row.campaign.status)
+        cost = row.metrics.cost_micros / 1_000_000
+        conversions = safe_float(row.metrics.conversions)
+        conversion_value = safe_float(
+            row.metrics.conversions_value
+        )
+        average_cpc = row.metrics.average_cpc / 1_000_000
+        ctr = safe_float(row.metrics.ctr) * 100
+        conversion_rate = (
+            safe_float(
+                row.metrics.conversions_from_interactions_rate
+            )
+            * 100
+        )
+        cpa = cost / conversions if conversions > 0 else None
+        roas = conversion_value / cost if cost > 0 else None
+
+        total_impressions += row.metrics.impressions
+        total_clicks += row.metrics.clicks
+        total_cost += cost
+        total_conversions += conversions
+        total_conversion_value += conversion_value
+
+        networks.append(
+            {
+                "network": enum_name(
+                    row.segments.ad_network_type
+                ),
+                "impressions": row.metrics.impressions,
+                "clicks": row.metrics.clicks,
+                "ctr_percent": round(ctr, 2),
+                "average_cpc": round(average_cpc, 2),
+                "cost": round(cost, 2),
+                "conversions": round(conversions, 2),
+                "conversion_rate_percent": round(
+                    conversion_rate,
+                    2,
+                ),
+                "conversion_value": round(
+                    conversion_value,
+                    2,
+                ),
+                "cpa": (
+                    round(cpa, 2)
+                    if cpa is not None
+                    else None
+                ),
+                "roas": (
+                    round(roas, 2)
+                    if roas is not None
+                    else None
+                ),
+            }
+        )
+
+    networks.sort(
+        key=lambda item: item["cost"],
+        reverse=True,
+    )
+
+    campaign_ctr = (
+        total_clicks / total_impressions * 100
+        if total_impressions > 0
+        else None
+    )
+    campaign_average_cpc = (
+        total_cost / total_clicks
+        if total_clicks > 0
+        else None
+    )
+    campaign_conversion_rate = (
+        total_conversions / total_clicks * 100
+        if total_clicks > 0
+        else None
+    )
+    campaign_cpa = (
+        total_cost / total_conversions
+        if total_conversions > 0
+        else None
+    )
+    campaign_roas = (
+        total_conversion_value / total_cost
+        if total_cost > 0
+        else None
+    )
+
+    return {
+        "customer_id": customer_id,
+        "campaign_id": campaign_id,
+        "campaign_name": campaign_name,
+        "campaign_status": campaign_status,
+        "date_range": date_range,
+        "summary": {
+            "networks_count": len(networks),
+            "impressions": total_impressions,
+            "clicks": total_clicks,
+            "ctr_percent": (
+                round(campaign_ctr, 2)
+                if campaign_ctr is not None
+                else None
+            ),
+            "average_cpc": (
+                round(campaign_average_cpc, 2)
+                if campaign_average_cpc is not None
+                else None
+            ),
+            "cost": round(total_cost, 2),
+            "conversions": round(total_conversions, 2),
+            "conversion_rate_percent": (
+                round(campaign_conversion_rate, 2)
+                if campaign_conversion_rate is not None
+                else None
+            ),
+            "conversion_value": round(
+                total_conversion_value,
+                2,
+            ),
+            "cpa": (
+                round(campaign_cpa, 2)
+                if campaign_cpa is not None
+                else None
+            ),
+            "roas": (
+                round(campaign_roas, 2)
+                if campaign_roas is not None
+                else None
+            ),
+        },
+        "networks": networks,
+    }
+
+
+# ============================================================
+# NETWORK PERFORMANCE
+# ============================================================
+
+@app.get("/network-performance")
+def network_performance(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne Google Ads",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie. "
+            "LAST_30_DAYS par défaut."
+        ),
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de début personnalisée au format YYYY-MM-DD."
+        ),
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de fin personnalisée au format YYYY-MM-DD."
+        ),
+    ),
+):
+    try:
+        performance = get_network_performance_data(
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if not performance["networks"]:
+            return {
+                "status": "NO_DATA",
+                "customer_id": performance["customer_id"],
+                "campaign_id": performance["campaign_id"],
+                "date_range": performance["date_range"],
+                "message": (
+                    "Aucune performance par réseau n'a été "
+                    "retournée pour cette campagne et cette période."
+                ),
+            }
+
+        return {
+            "status": "SUCCESS",
+            **performance,
+        }
+
+    except ValueError as error:
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+
+# ============================================================
+# NETWORK OPPORTUNITIES
+# Analyse en lecture seule, aucune modification automatique
+# ============================================================
+
+@app.get("/network-opportunities")
+def network_opportunities(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne Google Ads",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie. "
+            "LAST_30_DAYS par défaut."
+        ),
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de début personnalisée au format YYYY-MM-DD."
+        ),
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de fin personnalisée au format YYYY-MM-DD."
+        ),
+    ),
+    minimum_clicks: int = Query(
+        default=10,
+        ge=1,
+        le=100000,
+        description=(
+            "Nombre minimum de clics avant d'évaluer un réseau."
+        ),
+    ),
+    minimum_cost: float = Query(
+        default=25.0,
+        ge=0,
+        description=(
+            "Coût minimum pour détecter une dépense sans conversion."
+        ),
+    ),
+    minimum_conversions_for_cpa: float = Query(
+        default=5.0,
+        ge=0.01,
+        le=100000.0,
+        description=(
+            "Garde-fou : conversions minimales avant "
+            "d'évaluer le CPA d'un réseau."
+        ),
+    ),
+    minimum_conversions_for_roas: float = Query(
+        default=5.0,
+        ge=0.01,
+        le=100000.0,
+        description=(
+            "Garde-fou : conversions minimales avant "
+            "d'évaluer le ROAS d'un réseau."
+        ),
+    ),
+    high_cpa_multiplier: float = Query(
+        default=1.5,
+        ge=1.0,
+        le=10.0,
+        description=(
+            "Multiplicateur du CPA campagne pour détecter un CPA élevé."
+        ),
+    ),
+    low_roas_multiplier: float = Query(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Part du ROAS campagne sous laquelle un réseau est faible."
+        ),
+    ),
+    winner_roas_multiplier: float = Query(
+        default=1.25,
+        ge=1.0,
+        le=10.0,
+        description=(
+            "Multiplicateur du ROAS campagne pour identifier un gagnant."
+        ),
+    ),
+):
+    try:
+        performance = get_network_performance_data(
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        networks = performance["networks"]
+        summary = performance["summary"]
+
+        if not networks:
+            return {
+                "status": "NO_DATA",
+                "mode": "RECOMMENDATION_ONLY",
+                "automatic_action": False,
+                "requires_human_confirmation": True,
+                "customer_id": performance["customer_id"],
+                "campaign_id": performance["campaign_id"],
+                "date_range": performance["date_range"],
+                "message": (
+                    "Aucune performance par réseau n'a été "
+                    "retournée pour cette campagne et cette période."
+                ),
+            }
+
+        campaign_cpa = summary["cpa"]
+        campaign_roas = summary["roas"]
+        high_cpa_threshold = (
+            campaign_cpa * high_cpa_multiplier
+            if campaign_cpa is not None
+            else None
+        )
+        low_roas_threshold = (
+            campaign_roas * low_roas_multiplier
+            if campaign_roas is not None
+            else None
+        )
+        winner_roas_threshold = (
+            campaign_roas * winner_roas_multiplier
+            if campaign_roas is not None
+            else None
+        )
+
+        waste_networks = []
+        high_cpa_networks = []
+        low_roas_networks = []
+        winner_networks = []
+        insufficient_data_networks = []
+        opportunities = []
+
+        for item in networks:
+            has_click_volume = item["clicks"] >= minimum_clicks
+
+            if (
+                has_click_volume
+                and item["cost"] >= minimum_cost
+                and item["conversions"] == 0
+            ):
+                opportunity = {
+                    **item,
+                    "priority": "HIGH",
+                    "opportunity_type": (
+                        "NETWORK_SPEND_WITHOUT_CONVERSIONS"
+                    ),
+                    "recommendation": (
+                        "Vérifier la qualité du trafic, les requêtes, "
+                        "les placements, le suivi des conversions et la "
+                        "page de destination. Ne pas modifier automatiquement "
+                        "les paramètres réseau."
+                    ),
+                }
+                waste_networks.append(opportunity)
+                opportunities.append(opportunity)
+                continue
+
+            cpa_has_volume = (
+                item["conversions"] >= minimum_conversions_for_cpa
+            )
+            roas_has_volume = (
+                item["conversions"] >= minimum_conversions_for_roas
+            )
+
+            if (
+                has_click_volume
+                and not cpa_has_volume
+                and item["cpa"] is not None
+            ):
+                insufficient_data_networks.append(
+                    {
+                        **item,
+                        "priority": "INFO",
+                        "opportunity_type": (
+                            "NETWORK_INSUFFICIENT_VOLUME"
+                        ),
+                        "recommendation": (
+                            "Le volume de conversions est insuffisant pour "
+                            "conclure sur le CPA de ce réseau. Continuer la "
+                            "collecte de données."
+                        ),
+                    }
+                )
+
+            if (
+                has_click_volume
+                and cpa_has_volume
+                and high_cpa_threshold is not None
+                and item["cpa"] is not None
+                and item["cpa"] > high_cpa_threshold
+            ):
+                opportunity = {
+                    **item,
+                    "priority": "MEDIUM",
+                    "opportunity_type": "NETWORK_HIGH_CPA",
+                    "campaign_cpa": campaign_cpa,
+                    "high_cpa_threshold": round(
+                        high_cpa_threshold,
+                        2,
+                    ),
+                    "cpa_vs_campaign_ratio": round(
+                        item["cpa"] / campaign_cpa,
+                        2,
+                    ),
+                    "recommendation": (
+                        "Comparer le CPC, le taux de conversion, la qualité "
+                        "du trafic et la page de destination sur ce réseau. "
+                        "Vérifier la stratégie d'enchères avant toute action."
+                    ),
+                }
+                high_cpa_networks.append(opportunity)
+                opportunities.append(opportunity)
+
+            if (
+                has_click_volume
+                and roas_has_volume
+                and low_roas_threshold is not None
+                and campaign_roas is not None
+                and campaign_roas > 0
+                and item["roas"] is not None
+                and item["roas"] < low_roas_threshold
+            ):
+                opportunity = {
+                    **item,
+                    "priority": "MEDIUM",
+                    "opportunity_type": "NETWORK_LOW_ROAS",
+                    "campaign_roas": campaign_roas,
+                    "low_roas_threshold": round(
+                        low_roas_threshold,
+                        2,
+                    ),
+                    "roas_vs_campaign_ratio": round(
+                        item["roas"] / campaign_roas,
+                        2,
+                    ),
+                    "recommendation": (
+                        "Analyser la valeur des conversions et la qualité "
+                        "du trafic de ce réseau. Ne pas désactiver ou réduire "
+                        "automatiquement la diffusion."
+                    ),
+                }
+                low_roas_networks.append(opportunity)
+                opportunities.append(opportunity)
+
+            if (
+                has_click_volume
+                and roas_has_volume
+                and winner_roas_threshold is not None
+                and item["conversions"] > 0
+                and item["roas"] is not None
+                and item["roas"] >= winner_roas_threshold
+            ):
+                opportunity = {
+                    **item,
+                    "priority": "INFO",
+                    "opportunity_type": "NETWORK_WINNER",
+                    "campaign_roas": campaign_roas,
+                    "winner_roas_threshold": round(
+                        winner_roas_threshold,
+                        2,
+                    ),
+                    "recommendation": (
+                        "Ce réseau surperforme le ROAS de la campagne. "
+                        "Confirmer que le volume et la qualité des conversions "
+                        "sont stables avant toute réallocation."
+                    ),
+                }
+                winner_networks.append(opportunity)
+                opportunities.append(opportunity)
+
+        priority_order = {
+            "HIGH": 0,
+            "MEDIUM": 1,
+            "LOW": 2,
+            "INFO": 3,
+        }
+        opportunities.sort(
+            key=lambda item: (
+                priority_order.get(item["priority"], 99),
+                -item["cost"],
+            )
+        )
+        waste_networks.sort(
+            key=lambda item: item["cost"],
+            reverse=True,
+        )
+        high_cpa_networks.sort(
+            key=lambda item: item["cpa"],
+            reverse=True,
+        )
+        low_roas_networks.sort(
+            key=lambda item: item["roas"],
+        )
+        winner_networks.sort(
+            key=lambda item: item["roas"],
+            reverse=True,
+        )
+        insufficient_data_networks.sort(
+            key=lambda item: item["cost"],
+            reverse=True,
+        )
+
+        estimated_wasted_cost = round(
+            sum(item["cost"] for item in waste_networks),
+            2,
+        )
+
+        main_risk = "Aucun risque important détecté par réseau."
+        recommended_first_action = (
+            "Continuer la surveillance de la performance par réseau."
+        )
+        estimated_priority = "LOW"
+
+        if waste_networks:
+            top_item = waste_networks[0]
+            main_risk = (
+                f"Le réseau {top_item['network']} a dépensé "
+                f"{top_item['cost']} $ sans conversion."
+            )
+            recommended_first_action = top_item["recommendation"]
+            estimated_priority = "HIGH"
+        elif high_cpa_networks:
+            top_item = high_cpa_networks[0]
+            main_risk = (
+                f"Le réseau {top_item['network']} a un CPA de "
+                f"{top_item['cpa']} $, contre {campaign_cpa} $ "
+                "pour la campagne."
+            )
+            recommended_first_action = top_item["recommendation"]
+            estimated_priority = "MEDIUM"
+        elif low_roas_networks:
+            top_item = low_roas_networks[0]
+            main_risk = (
+                f"Le réseau {top_item['network']} a un ROAS de "
+                f"{top_item['roas']}, contre {campaign_roas} "
+                "pour la campagne."
+            )
+            recommended_first_action = top_item["recommendation"]
+            estimated_priority = "MEDIUM"
+
+        main_opportunity = (
+            winner_networks[0]["network"]
+            if winner_networks
+            else None
+        )
+        main_opportunity_recommendation = (
+            winner_networks[0]["recommendation"]
+            if winner_networks
+            else None
+        )
+        priority_counts = {
+            "HIGH": sum(
+                1 for item in opportunities
+                if item["priority"] == "HIGH"
+            ),
+            "MEDIUM": sum(
+                1 for item in opportunities
+                if item["priority"] == "MEDIUM"
+            ),
+            "LOW": sum(
+                1 for item in opportunities
+                if item["priority"] == "LOW"
+            ),
+            "INFO": sum(
+                1 for item in opportunities
+                if item["priority"] == "INFO"
+            ),
+        }
+
+        return {
+            "status": "SUCCESS",
+            "mode": "RECOMMENDATION_ONLY",
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+            "customer_id": performance["customer_id"],
+            "campaign_id": performance["campaign_id"],
+            "campaign_name": performance["campaign_name"],
+            "campaign_status": performance["campaign_status"],
+            "date_range": performance["date_range"],
+            "thresholds": {
+                "minimum_clicks": minimum_clicks,
+                "minimum_cost": minimum_cost,
+                "minimum_conversions_for_cpa": (
+                    minimum_conversions_for_cpa
+                ),
+                "minimum_conversions_for_roas": (
+                    minimum_conversions_for_roas
+                ),
+                "high_cpa_multiplier": high_cpa_multiplier,
+                "low_roas_multiplier": low_roas_multiplier,
+                "winner_roas_multiplier": winner_roas_multiplier,
+                "high_cpa_threshold": (
+                    round(high_cpa_threshold, 2)
+                    if high_cpa_threshold is not None
+                    else None
+                ),
+                "low_roas_threshold": (
+                    round(low_roas_threshold, 2)
+                    if low_roas_threshold is not None
+                    else None
+                ),
+                "winner_roas_threshold": (
+                    round(winner_roas_threshold, 2)
+                    if winner_roas_threshold is not None
+                    else None
+                ),
+            },
+            "campaign_summary": summary,
+            "executive_summary": {
+                "main_risk": main_risk,
+                "main_opportunity": main_opportunity,
+                "main_opportunity_recommendation": (
+                    main_opportunity_recommendation
+                ),
+                "recommended_first_action": (
+                    recommended_first_action
+                ),
+                "estimated_priority": estimated_priority,
+                "estimated_wasted_cost": estimated_wasted_cost,
+            },
+            "opportunity_counts": {
+                "total": len(opportunities),
+                "priority_counts": priority_counts,
+                "spend_without_conversions": len(waste_networks),
+                "high_cpa": len(high_cpa_networks),
+                "low_roas": len(low_roas_networks),
+                "winners": len(winner_networks),
+                "insufficient_volume": len(
+                    insufficient_data_networks
+                ),
+            },
+            "opportunities": opportunities,
+            "spend_without_conversions": waste_networks,
+            "high_cpa_networks": high_cpa_networks,
+            "low_roas_networks": low_roas_networks,
+            "winner_networks": winner_networks,
+            "insufficient_data_networks": (
+                insufficient_data_networks
+            ),
+            "network_performance": networks,
+            "disclaimer": (
+                "Les résultats sont des signaux d'analyse en lecture seule. "
+                "Vérifier le volume, la qualité des conversions, la stratégie "
+                "d'enchères et le contexte commercial avant toute modification."
+            ),
+        }
+
+    except ValueError as error:
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
+
+    except Exception as error:
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
+
+
+
+
+
+
  # ----------------------------------------------------
  # BUDGET UPDATE
  # ----------------------------------------------------
