@@ -770,6 +770,212 @@ def ad_groups(
             "status": "FAILED",
             "error": str(error),
         }
+# ============================================================
+# TOP AD GROUPS
+# ============================================================
+
+@app.get("/top-ad-groups")
+def top_ad_groups(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne",
+    ),
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+    ),
+    ranking_by: str = Query(
+        default="ROAS",
+        description=(
+            "ROAS | CPA | CONVERSIONS | "
+            "CONVERSION_VALUE | CTR | "
+            "CLICKS | COST | IMPRESSIONS | "
+            "CONVERSION_RATE | AVG_CPC"
+        ),
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+    ),
+):
+    try:
+
+        ranking_by = (
+            ranking_by.upper().strip()
+        )
+
+        valid_metrics = {
+            "ROAS",
+            "CPA",
+            "CONVERSIONS",
+            "CONVERSION_VALUE",
+            "CTR",
+            "CLICKS",
+            "COST",
+            "IMPRESSIONS",
+            "CONVERSION_RATE",
+            "AVG_CPC",
+        }
+
+        if ranking_by not in valid_metrics:
+
+            return {
+                "status": "FAILED",
+                "error": (
+                    f"ranking_by invalide. "
+                    f"Valeurs acceptées : "
+                    f"{sorted(valid_metrics)}"
+                ),
+            }
+
+        performance = ad_groups(
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if (
+            not isinstance(
+                performance,
+                dict,
+            )
+            or performance.get("status")
+            != "SUCCESS"
+        ):
+            return performance
+
+        ad_groups_data = (
+            performance.get(
+                "ad_groups",
+                [],
+            )
+        )
+
+        metric_field = {
+            "ROAS": "roas",
+            "CPA": "cpa",
+            "CONVERSIONS": (
+                "conversions"
+            ),
+            "CONVERSION_VALUE": (
+                "conversion_value"
+            ),
+            "CTR": (
+                "ctr_percent"
+            ),
+            "CLICKS": (
+                "clicks"
+            ),
+            "COST": (
+                "cost"
+            ),
+            "IMPRESSIONS": (
+                "impressions"
+            ),
+            "CONVERSION_RATE": (
+                "conversion_rate_percent"
+            ),
+            "AVG_CPC": (
+                "average_cpc"
+            ),
+        }
+
+        metric_name = (
+            metric_field[
+                ranking_by
+            ]
+        )
+
+        ranked_ad_groups = [
+            item
+            for item in ad_groups_data
+            if item.get(
+                metric_name
+            )
+            is not None
+        ]
+
+        reverse_sort = (
+            ranking_by != "CPA"
+        )
+
+        ranked_ad_groups.sort(
+            key=lambda item:
+                item[
+                    metric_name
+                ],
+            reverse=reverse_sort,
+        )
+
+        return {
+            "status": "SUCCESS",
+
+            "customer_id":
+                customer_id,
+
+            "campaign_id":
+                campaign_id,
+
+            "campaign_name":
+                performance.get(
+                    "campaign_name"
+                ),
+
+            "date_range":
+                performance.get(
+                    "date_range"
+                ),
+
+            "summary": {
+
+                "total_ad_groups":
+                    len(
+                        ad_groups_data
+                    ),
+
+                "ranked_ad_groups":
+                    len(
+                        ranked_ad_groups
+                    ),
+
+                "limit":
+                    limit,
+
+                "ranking_by":
+                    ranking_by,
+            },
+
+            "top_ad_groups":
+                ranked_ad_groups[
+                    :limit
+                ],
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
 # ----------------------------------------------------
 # PAUSE AD GROUPE
 # ----------------------------------------------------
