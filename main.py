@@ -1097,10 +1097,37 @@ def pause_campaign(
 # ----------------------------------------------------
 # CAMPAIGN HEALTH
 # ----------------------------------------------------
+
 @app.get("/campaign-health")
 def campaign_health(
-    customer_id: str,
-    campaign_id: str
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne Google Ads",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie."
+        ),
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de début personnalisée "
+            "au format YYYY-MM-DD"
+        ),
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description=(
+            "Date de fin personnalisée "
+            "au format YYYY-MM-DD"
+        ),
+    ),
 ):
     try:
 
@@ -1108,10 +1135,39 @@ def campaign_health(
             customer_id
         )
 
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        if not campaign_id.isdigit():
+            return {
+                "status": "FAILED",
+                "error": (
+                    "campaign_id doit contenir "
+                    "uniquement des chiffres."
+                ),
+            }
+
+        date_configuration = (
+            build_date_filter(
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
+        date_filter = (
+            date_configuration["filter"]
+        )
+
         client = get_google_ads_client()
 
-        google_ads_service = client.get_service(
-            "GoogleAdsService"
+        google_ads_service = (
+            client.get_service(
+                "GoogleAdsService"
+            )
         )
 
         # ----------------------------------------------------
@@ -1133,43 +1189,42 @@ def campaign_health(
                 metrics.conversions_value
             FROM campaign
             WHERE campaign.id = {campaign_id}
-              AND segments.date DURING LAST_30_DAYS
+              AND {date_filter}
         """
 
         campaign_response = (
             google_ads_service.search(
                 customer_id=customer_id,
-                query=campaign_query
+                query=campaign_query,
             )
         )
 
         campaign_row = next(
             iter(campaign_response),
-            None
+            None,
         )
 
         if not campaign_row:
             return {
                 "status": "FAILED",
-                "error":
-                    "Campaign not found"
+                "error": "Campaign not found",
             }
 
         cost = (
             campaign_row.metrics.cost_micros
-            / 1000000
+            / 1_000_000
         )
 
-        conversions = float(
+        conversions = safe_float(
             campaign_row.metrics.conversions
         )
 
-        conversion_value = float(
+        conversion_value = safe_float(
             campaign_row.metrics.conversions_value
         )
 
         ctr = (
-            float(
+            safe_float(
                 campaign_row.metrics.ctr
             )
             * 100
@@ -1202,7 +1257,7 @@ def campaign_health(
         ad_group_response = (
             google_ads_service.search(
                 customer_id=customer_id,
-                query=ad_group_query
+                query=ad_group_query,
             )
         )
 
@@ -1224,7 +1279,7 @@ def campaign_health(
             elif status == "PAUSED":
                 paused_ad_groups += 1
 
-                # ----------------------------------------------------
+        # ----------------------------------------------------
         # HEALTH V2
         # ----------------------------------------------------
 
@@ -1275,7 +1330,10 @@ def campaign_health(
         if conversions > 0:
 
             strengths.append(
-                f"{round(conversions,2)} conversions sur les 30 derniers jours"
+                (
+                    f"{round(conversions,2)} "
+                    f"conversions sur la période analysée"
+                )
             )
 
         if conversions == 0 and cost > 50:
@@ -1300,7 +1358,11 @@ def campaign_health(
                 "Valider si les groupes en pause doivent être réactivés."
             )
 
-        if enabled_ad_groups == total_ad_groups:
+        if (
+            total_ad_groups > 0
+            and enabled_ad_groups
+            == total_ad_groups
+        ):
 
             strengths.append(
                 "Tous les groupes d'annonces sont actifs."
@@ -1331,54 +1393,67 @@ def campaign_health(
             0,
             min(
                 100,
-                round(health_score)
-            )
+                round(health_score),
+            ),
         )
 
         if health_score >= 90:
-
             health_status = "GOOD"
 
         elif health_score >= 70:
-
             health_status = "WARNING"
 
         else:
-
             health_status = "CRITICAL"
 
         return {
 
-            "campaign_id":
-                str(
-                    campaign_row.campaign.id
+            "status": "SUCCESS",
+
+            "customer_id": customer_id,
+
+            "campaign_id": str(
+                campaign_row.campaign.id
+            ),
+
+            "campaign_name": (
+                campaign_row.campaign.name
+            ),
+
+            "campaign_status": enum_name(
+                campaign_row.campaign.status
+            ),
+
+            "campaign_type": enum_name(
+                campaign_row
+                .campaign
+                .advertising_channel_type
+            ),
+
+            "date_range": {
+                "mode": (
+                    date_configuration["mode"]
                 ),
-
-            "campaign_name":
-                campaign_row.campaign.name,
-
-            "campaign_status":
-                enum_name(
-                    campaign_row.campaign.status
+                "period": (
+                    date_configuration["period"]
                 ),
-
-            "campaign_type":
-                enum_name(
-                    campaign_row
-                    .campaign
-                    .advertising_channel_type
+                "start_date": (
+                    date_configuration["start_date"]
                 ),
-
-            "budget":
-                round(
-                    campaign_row
-                    .campaign_budget
-                    .amount_micros
-                    / 1000000,
-                    2
+                "end_date": (
+                    date_configuration["end_date"]
                 ),
+            },
 
-            "last_30_days": {
+            "budget": round(
+                campaign_row
+                .campaign_budget
+                .amount_micros
+                / 1_000_000,
+                2,
+            ),
+
+            "performance": {
 
                 "impressions":
                     campaign_row.metrics.impressions,
@@ -1387,44 +1462,29 @@ def campaign_health(
                     campaign_row.metrics.clicks,
 
                 "ctr_percent":
-                    round(
-                        ctr,
-                        2
-                    ),
+                    round(ctr, 2),
 
                 "cost":
-                    round(
-                        cost,
-                        2
-                    ),
+                    round(cost, 2),
 
                 "conversions":
-                    round(
-                        conversions,
-                        2
-                    ),
+                    round(conversions, 2),
 
                 "conversion_value":
                     round(
                         conversion_value,
-                        2
+                        2,
                     ),
 
                 "cpa":
-                    round(
-                        cpa,
-                        2
-                    )
-                    if cpa
+                    round(cpa, 2)
+                    if cpa is not None
                     else None,
 
                 "roas":
-                    round(
-                        roas,
-                        2
-                    )
-                    if roas
-                    else None
+                    round(roas, 2)
+                    if roas is not None
+                    else None,
             },
 
             "ad_groups": {
@@ -1436,36 +1496,41 @@ def campaign_health(
                     enabled_ad_groups,
 
                 "paused":
-                    paused_ad_groups
+                    paused_ad_groups,
             },
 
             "health": {
 
-                    "score":
-                        health_score,
+                "score":
+                    health_score,
 
-                    "status":
-                        health_status,
+                "status":
+                    health_status,
 
-                    "strengths":
-                        strengths,
+                "strengths":
+                    strengths,
 
-                    "warnings":
-                        warnings,
+                "warnings":
+                    warnings,
 
-                    "recommendations":
-                        recommendations
-         } 
-            
+                "recommendations":
+                    recommendations,
+            },
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
         }
 
     except Exception as error:
 
         return {
             "status": "FAILED",
-            "error": str(error)
+            "error": str(error),
         }
-
 # ----------------------------------------------------
 # PREVIEW BUDGET UPDATE
 # ----------------------------------------------------
