@@ -8851,11 +8851,7 @@ def account_insights(
                 keywords,
                 **shared,
             ),
-            _account_insights_safe_call(
-                "search_terms",
-                search_terms,
-                **campaign_shared,
-            ),
+            
             _account_insights_safe_call(
                 "search_term_opportunities",
                 search_term_opportunities,
@@ -8912,10 +8908,65 @@ def account_insights(
             for item in keywords_data.get("keywords", [])
             if str(item.get("campaign_id")) == campaign_id
         ]
-        campaign_search_terms = search_terms_data.get(
-            "search_terms",
-            [],
-        )
+        
+
+        campaign_search_terms = []
+
+        search_term_collections = [
+            search_opportunities_data.get(
+                "strong_new_keyword_opportunities",
+                [],
+            ),
+            search_opportunities_data.get(
+                "new_keyword_opportunities",
+                [],
+            ),
+            search_opportunities_data.get(
+                "strong_existing_keywords",
+                [],
+            ),
+            search_opportunities_data.get(
+                "high_cpa_terms",
+                [],
+            ),
+            search_opportunities_data.get(
+                "low_ctr_terms",
+                [],
+            ),
+            search_opportunities_data.get(
+                "negative_keyword_candidates",
+                [],
+            ),
+            search_opportunities_data.get(
+                "already_added_keywords",
+                [],
+            ),
+            search_opportunities_data.get(
+                "already_excluded_terms",
+                [],
+            ),
+        ]
+
+        seen_search_terms = set()
+
+        for collection in search_term_collections:
+            for item in collection:
+                identifier = (
+                    item.get("ad_group_id"),
+                    item.get(
+                        "normalized_search_term",
+                        item.get("search_term"),
+                    ),
+                )
+
+                if identifier in seen_search_terms:
+                    continue
+
+                seen_search_terms.add(identifier)
+                campaign_search_terms.append(item)
+
+
+
         devices = device_data.get("device_performance", [])
         networks = network_data.get("network_performance", [])
 
@@ -9173,7 +9224,19 @@ def account_insights(
                 "ad_groups": len(campaign_ad_groups),
                 "ads": len(campaign_ads),
                 "keywords": len(campaign_keywords),
-                "search_terms": len(campaign_search_terms),
+
+                "search_terms": (
+                    search_opportunities_data
+                    .get(
+                        "campaign_summary",
+                        {},
+                    )
+                    .get(
+                        "search_terms_analyzed",
+                        len(campaign_search_terms),
+                    )
+                ),
+                
                 "devices": len(devices),
                 "networks": len(networks),
             },
