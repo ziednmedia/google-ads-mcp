@@ -2615,6 +2615,331 @@ def keywords(
             "error": str(error),
             "customer_id": customer_id,
         }
+
+# ============================================================
+# TOP KEYWORDS
+# ============================================================
+
+@app.get("/top-keywords")
+def top_keywords(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+    ),
+    ranking_by: str = Query(
+        default="ROAS",
+        description=(
+            "ROAS | CPA | CONVERSIONS | "
+            "CONVERSION_VALUE | CTR | "
+            "CLICKS | COST | IMPRESSIONS | "
+            "CONVERSION_RATE | AVG_CPC"
+        ),
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+    ),
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        ranking_by = (
+            ranking_by.upper().strip()
+        )
+
+        valid_metrics = {
+            "ROAS",
+            "CPA",
+            "CONVERSIONS",
+            "CONVERSION_VALUE",
+            "CTR",
+            "CLICKS",
+            "COST",
+            "IMPRESSIONS",
+            "CONVERSION_RATE",
+            "AVG_CPC",
+        }
+
+        if ranking_by not in valid_metrics:
+            return {
+                "status": "FAILED",
+                "error": (
+                    f"ranking_by invalide. "
+                    f"Valeurs acceptées : "
+                    f"{sorted(valid_metrics)}"
+                ),
+            }
+
+        date_configuration = (
+            build_date_filter(
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+
+        date_filter = (
+            date_configuration["filter"]
+        )
+
+        date_range = {
+            "mode": (
+                date_configuration["mode"]
+            ),
+            "period": (
+                date_configuration["period"]
+            ),
+            "start_date": (
+                date_configuration["start_date"]
+            ),
+            "end_date": (
+                date_configuration["end_date"]
+            ),
+        }
+
+        client = get_google_ads_client()
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type,
+                ad_group_criterion.status,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.ctr,
+                metrics.average_cpc,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value,
+                metrics.conversions_from_interactions_rate
+            FROM keyword_view
+            WHERE ad_group_criterion.status != 'REMOVED'
+              AND {date_filter}
+        """
+
+        response = execute_query(
+            client,
+            customer_id,
+            query,
+        )
+
+        keywords = []
+
+        for row in response:
+
+            cost = (
+                row.metrics.cost_micros
+                / 1_000_000
+            )
+
+            conversions = safe_float(
+                row.metrics.conversions
+            )
+
+            conversion_value = safe_float(
+                row.metrics.conversions_value
+            )
+
+            average_cpc = (
+                row.metrics.average_cpc
+                / 1_000_000
+            )
+
+            ctr = (
+                safe_float(
+                    row.metrics.ctr
+                )
+                * 100
+            )
+
+            conversion_rate = (
+                safe_float(
+                    row.metrics
+                    .conversions_from_interactions_rate
+                )
+                * 100
+            )
+
+            cpa = (
+                round(
+                    cost / conversions,
+                    2,
+                )
+                if conversions > 0
+                else None
+            )
+
+            roas = (
+                round(
+                    conversion_value / cost,
+                    2,
+                )
+                if cost > 0
+                else None
+            )
+
+            keywords.append(
+                {
+                    "campaign_id": str(
+                        row.campaign.id
+                    ),
+                    "campaign_name": (
+                        row.campaign.name
+                    ),
+                    "ad_group_id": str(
+                        row.ad_group.id
+                    ),
+                    "ad_group_name": (
+                        row.ad_group.name
+                    ),
+                    "criterion_id": str(
+                        row.ad_group_criterion
+                        .criterion_id
+                    ),
+                    "keyword": (
+                        row.ad_group_criterion
+                        .keyword.text
+                    ),
+                    "match_type": enum_name(
+                        row.ad_group_criterion
+                        .keyword.match_type
+                    ),
+                    "status": enum_name(
+                        row.ad_group_criterion
+                        .status
+                    ),
+                    "impressions": (
+                        row.metrics.impressions
+                    ),
+                    "clicks": (
+                        row.metrics.clicks
+                    ),
+                    "ctr": round(
+                        ctr,
+                        2,
+                    ),
+                    "average_cpc": round(
+                        average_cpc,
+                        2,
+                    ),
+                    "cost": round(
+                        cost,
+                        2,
+                    ),
+                    "conversions": round(
+                        conversions,
+                        2,
+                    ),
+                    "conversion_rate": round(
+                        conversion_rate,
+                        2,
+                    ),
+                    "conversion_value": round(
+                        conversion_value,
+                        2,
+                    ),
+                    "cpa": cpa,
+                    "roas": roas,
+                }
+            )
+
+        metric_field = {
+            "ROAS": "roas",
+            "CPA": "cpa",
+            "CONVERSIONS": "conversions",
+            "CONVERSION_VALUE": (
+                "conversion_value"
+            ),
+            "CTR": "ctr",
+            "CLICKS": "clicks",
+            "COST": "cost",
+            "IMPRESSIONS": (
+                "impressions"
+            ),
+            "CONVERSION_RATE": (
+                "conversion_rate"
+            ),
+            "AVG_CPC": (
+                "average_cpc"
+            ),
+        }
+
+        metric_name = (
+            metric_field[ranking_by]
+        )
+
+        ranked_keywords = [
+            keyword
+            for keyword in keywords
+            if keyword.get(metric_name)
+            is not None
+        ]
+
+        reverse_sort = ranking_by != "CPA"
+
+        ranked_keywords.sort(
+            key=lambda item: (
+                item[metric_name]
+            ),
+            reverse=reverse_sort,
+        )
+
+        return {
+            "status": "SUCCESS",
+
+            "customer_id": customer_id,
+
+            "date_range": date_range,
+
+            "summary": {
+                "keywords_analyzed": len(
+                    keywords
+                ),
+                "ranked_keywords": len(
+                    ranked_keywords
+                ),
+                "limit": limit,
+                "ranking_by": (
+                    ranking_by
+                ),
+            },
+
+            "top_keywords": (
+                ranked_keywords[:limit]
+            ),
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
 # ============================================================
 # SEARCH TERMS
 # ============================================================
