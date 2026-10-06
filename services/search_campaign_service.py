@@ -574,4 +574,751 @@ class SearchCampaignService:
 
         ads = []
 
-        for ad in ads_by
+        for ad in ads_by_group.values():
+
+            ad["headlines"] = (
+                SearchCampaignService
+                ._remove_duplicates(
+                    ad["headlines"]
+                )
+            )
+
+            ad["descriptions"] = (
+                SearchCampaignService
+                ._remove_duplicates(
+                    ad["descriptions"]
+                )
+            )
+
+            ad[
+                "headlines_count"
+            ] = len(
+                ad["headlines"]
+            )
+
+            ad[
+                "descriptions_count"
+            ] = len(
+                ad["descriptions"]
+            )
+
+            ads.append(
+                ad
+            )
+
+        return ads
+
+    @staticmethod
+    def _validate_campaign(
+        campaign: dict,
+    ) -> list[dict]:
+
+        errors = []
+
+        required_fields = [
+            "account_name",
+            "customer_id",
+            "campaign_name",
+            "objective",
+            "daily_budget",
+            "currency",
+            "language",
+            "locations",
+            "network",
+            "bidding_strategy",
+            "status",
+        ]
+
+        for field_name in required_fields:
+
+            value = campaign.get(
+                field_name
+            )
+
+            if value in {
+                None,
+                "",
+            } or value == []:
+
+                errors.append(
+                    {
+                        "section":
+                            "CAMPAIGN",
+
+                        "field":
+                            field_name,
+
+                        "error":
+                            "REQUIRED_FIELD_MISSING",
+                    }
+                )
+
+        daily_budget = campaign.get(
+            "daily_budget"
+        )
+
+        if (
+            daily_budget is not None
+            and (
+                not isinstance(
+                    daily_budget,
+                    (
+                        int,
+                        float,
+                    ),
+                )
+                or daily_budget <= 0
+            )
+        ):
+            errors.append(
+                {
+                    "section":
+                        "CAMPAIGN",
+
+                    "field":
+                        "daily_budget",
+
+                    "error":
+                        "DAILY_BUDGET_MUST_BE_POSITIVE",
+                }
+            )
+
+        return errors
+
+    @staticmethod
+    def _validate_ad_groups(
+        ad_groups: list[dict],
+    ) -> list[dict]:
+
+        errors = []
+
+        if not ad_groups:
+
+            errors.append(
+                {
+                    "section":
+                        "AD_GROUPS",
+
+                    "error":
+                        "AT_LEAST_ONE_AD_GROUP_REQUIRED",
+                }
+            )
+
+            return errors
+
+        seen_names = set()
+
+        for ad_group in ad_groups:
+
+            name = ad_group.get(
+                "name"
+            )
+
+            normalized_name = (
+                name.casefold               errors.append(
+                    {
+                        "section":
+                            "AD_GROUPS",
+
+                        "source_row":
+                            ad_group.get(
+                                "source_row"
+                            ),
+
+                        "field":
+                            "name",
+
+                        "error":
+                            "AD_GROUP_NAME_REQUIRED",
+                    }
+                )
+
+            elif normalized_name in seen_names:
+
+                errors.append(
+                    {
+                        "section":
+                            "AD_GROUPS",
+
+                        "source_row":
+                            ad_group.get(
+                                "source_row"
+                            ),
+
+                        "field":
+                            "name",
+
+                        "error":
+                            "DUPLICATE_AD_GROUP_NAME",
+                    }
+                )
+
+            else:
+                seen_names.add(
+                    normalized_name
+                )
+
+            if not ad_group.get(
+                "final_url"
+            ):
+
+                errors.append(
+                    {
+                        "section":
+                            "AD_GROUPS",
+
+                        "ad_group":
+                            name,
+
+                        "field":
+                            "final_url",
+
+                        "error":
+                            "FINAL_URL_REQUIRED",
+                    }
+                )
+
+            path1 = (
+                ad_group.get(
+                    "path1"
+                )
+                or ""
+            )
+
+            path2 = (
+                ad_group.get(
+                    "path2"
+                )
+                or ""
+            )
+
+            if len(path1) > 15:
+
+                errors.append(
+                    {
+                        "section":
+                            "AD_GROUPS",
+
+                        "ad_group":
+                            name,
+
+                        "field":
+                            "path1",
+
+                        "error":
+                            "PATH_TOO_LONG",
+
+                        "maximum":
+                            15,
+
+                        "actual":
+                            len(path1),
+                    }
+                )
+
+            if len(path2) > 15:
+
+                errors.append(
+                    {
+                        "section":
+                            "AD_GROUPS",
+
+                        "ad_group":
+                            name,
+
+                        "field":
+                            "path2",
+
+                        "error":
+                            "PATH_TOO_LONG",
+
+                        "maximum":
+                            15,
+
+                        "actual":
+                            len(path2),
+                    }
+                )
+
+            if path2 and not path1:
+
+                errors.append(
+                    {
+                        "section":
+                            "AD_GROUPS",
+
+                        "ad_group":
+                            name,
+
+                        "field":
+                            "path2",
+
+                        "error":
+                            "PATH2_REQUIRES_PATH1",
+                    }
+                )
+
+        return errors
+
+    @staticmethod
+    def _validate_ads(
+        ads: list[dict],
+    ) -> listerrors = []
+
+        if not ads:
+
+            errors.append(
+                {
+                    "section":
+                        "ADS",
+
+                    "error":
+                        "AT_LEAST_ONE_RSA_REQUIRED",
+                }
+            )
+
+            return errors
+
+        for ad in ads:
+
+            ad_group_name = (
+                ad.get(
+                    "ad_group_name"
+                )
+            )
+
+            headlines = ad.get(
+                "headlines",
+                [],
+            )
+
+            descriptions = ad.get(
+                "descriptions",
+                [],
+            )
+
+            if len(headlines) < 3:
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "headlines",
+
+                        "error":
+                            "MINIMUM_THREE_HEADLINES",
+
+                        "actual":
+                            len(headlines),
+                    }
+                )
+
+            if len(headlines) > 15:
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "headlines",
+
+                        "error":
+                            "MAXIMUM_FIFTEEN_HEADLINES",
+
+                        "actual":
+                            len(headlines),
+                    }
+                )
+
+            if len(descriptions) < 2:
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "descriptions",
+
+                        "error":
+                            "MINIMUM_TWO_DESCRIPTIONS",
+
+                        "actual":
+                            len(descriptions),
+                    }
+                )
+
+            if len(descriptions) > 4:
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "descriptions",
+
+                        "error":
+                            "MAXIMUM_FOUR_DESCRIPTIONS",
+
+                        "actual":
+                            len(descriptions),
+                    }
+                )
+
+            for position, headline in enumerate(
+                headlines,
+                start=1,
+            ):
+
+                if len(headline) > 30:
+
+                    errors.append(
+                        {
+                            "section":
+                                "ADS",
+
+                            "ad_group":
+                                ad_group_name,
+
+                            "field":
+                                f"headline_{position}",
+
+                            "error":
+                                "HEADLINE_TOO_LONG",
+
+                            "maximum":
+                                30,
+
+                            "actual":
+                                len(headline),
+
+                            "value":
+                                headline,
+                        }
+                    )
+
+                if "!" in headline:
+
+                    errors.append(
+                        {
+                            "section":
+                                "ADS",
+
+                            "ad_group":
+                                ad_group_name,
+
+                            "field":
+                                f"headline_{position}",
+
+                            "error":
+                                "EXCLAMATION_NOT_ALLOWED_IN_HEADLINE",
+
+                            "value":
+                                headline,
+                        }
+                    )
+
+            total_exclamation_marks = 0
+
+            for position, description in enumerate(
+                descriptions,
+                start=1,
+            ):
+
+                if len(description) > 90:
+
+                    errors.append(
+                        {
+                            "section":
+                                "ADS",
+
+                            "ad_group":
+                                ad_group_name,
+
+                            "field":
+                                f"description_{position}",
+
+                            "error":
+                                "DESCRIPTION_TOO_LONG",
+
+                            "maximum":
+                                90,
+
+                            "actual":
+                                len(
+                                    description
+                                ),
+
+                            "value":
+                                description,
+                        }
+                    )
+
+                total_exclamation_marks += (
+                    description.count(
+                        "!"
+                    )
+                )
+
+            if total_exclamation_marks > 1:
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "descriptions",
+
+                        "error":
+                            "TOO_MANY_EXCLAMATION_MARKS",
+
+                        "maximum":
+                            1,
+
+                        "actual":
+                            total_exclamation_marks,
+                    }
+                )
+
+            if not ad.get(
+                "final_url"
+            ):
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "final_url",
+
+                        "error":
+                            "FINAL_URL_REQUIRED",
+                    }
+                )
+
+        return errors
+
+    @staticmethod
+    def read_excel(
+        file_path: str,
+    ) -> dict:
+
+        workbook = load_workbook(
+            file_path,
+            data_only=True,
+        )
+
+        missing_sheets = sorted(
+            SearchCampaignService
+            .REQUIRED_SHEETS
+            .difference(
+                set(
+                    workbook.sheetnames
+                )
+            )
+        )
+
+        if missing_sheets:
+
+            return {
+                "status":
+                    "INVALID_TEMPLATE",
+
+                "missing_sheets":
+                    missing_sheets,
+
+                "worksheets":
+                    workbook.sheetnames,
+            }
+
+        campaign = (
+            SearchCampaignService
+            ._read_campaign(
+                workbook
+            )
+        )
+
+        ad_groups = (
+            SearchCampaignService
+            ._read_ad_groups(
+                workbook,
+                campaign.get(
+                    "campaign_name"
+                ),
+            )
+        )
+
+        ads = (
+            SearchCampaignService
+            ._read_ads(
+                workbook,
+                campaign.get(
+                    "campaign_name"
+                ),
+            )
+        )
+
+        validation_errors = []
+
+        validation_errors.extend(
+            SearchCampaignService
+            ._validate_campaign(
+                campaign
+            )
+        )
+
+        validation_errors.extend(
+            SearchCampaignService
+            ._validate_ad_groups(
+                ad_groups
+            )
+        )
+
+        validation_errors.extend(
+            SearchCampaignService
+            ._validate_ads(
+                ads
+            )
+        )
+
+        ad_group_names = {
+            ad_group.get(
+                "name"
+            )
+            for ad_group in ad_groups
+            if ad_group.get(
+                "name"
+            )
+        }
+
+        ads_without_ad_group = [
+            ad.get(
+                "ad_group_name"
+            )
+            for ad in ads
+            if ad.get(
+                "ad_group_name"
+            )
+            not in ad_group_names
+        ]
+
+        for ad_group_name in (
+            ads_without_ad_group
+        ):
+
+            validation_errors.append(
+                {
+                    "section":
+                        "ADS",
+
+                    "ad_group":
+                        ad_group_name,
+
+                    "error":
+                        "AD_GROUP_NOT_FOUND",
+                }
+            )
+
+        result_status = (
+            "READY_FOR_REVIEW"
+            if not validation_errors
+            else "VALIDATION_FAILED"
+        )
+
+        return {
+            "status":
+                result_status,
+
+            "read_only":
+                True,
+
+            "automatic_action":
+                False,
+
+            "requires_human_confirmation":
+                True,
+
+            "worksheets":
+                workbook.sheetnames,
+
+            "campaign":
+                campaign,
+
+            "summary": {
+                "ad_groups_count":
+                    len(ad_groups),
+
+                "ads_count":
+                    len(ads),
+
+                "headlines_count":
+                    sum(
+                        len(
+                            ad.get(
+                                "headlines",
+                                [],
+                            )
+                        )
+                        for ad in ads
+                    ),
+
+                "descriptions_count":
+                    sum(
+                        len(
+                            ad.get(
+                                "descriptions",
+                                [],
+                            )
+                        )
+                        for ad in ads
+                    ),
+
+                "validation_errors_count":
+                    len(
+                        validation_errors
+                    ),
+            },
+
+            "ad_groups":
+                ad_groups,
+
+            "ads":
+                ads,
+
+            "validation": {
+                "passed":
+                    not validation_errors,
+
+                "errors":
+                    validation_errors,
+            },
+
+            "next_step": (
+                "Lire et valider les onglets "
+                "Keywords et Sitelinks."
+            ),
+        }
