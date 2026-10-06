@@ -9646,10 +9646,151 @@ def executive_summary(
         }
 
 # ============================================================
-# ACTION PLAN
+# ACTION PLAN - VERSION CORRIGÉE ET AMÉLIORÉE
 # Plan d'action dynamique basé sur account-insights
-# Lecture seule
+# Lecture seule : aucune modification Google Ads
+#
+# Prérequis déjà définis dans main.py :
+# - app
+# - Query
+# - Optional
+# - _account_insights_safe_call
+# - account_insights
 # ============================================================
+
+
+def _action_plan_normalize_value(value):
+    """Normalise une valeur pour détecter les recommandations en double."""
+
+    if value is None:
+        return ""
+
+    return " ".join(
+        str(value).strip().lower().split()
+    )
+
+
+def _action_plan_title(item_type, source):
+    """Produit un titre lisible selon le type et la source."""
+
+    if item_type == "RISK":
+        if source == "SEARCH_TERMS":
+            return "Vérifier un terme de recherche coûteux"
+        if source == "DEVICE":
+            return "Examiner un appareil moins performant"
+        if source == "NETWORK":
+            return "Examiner un réseau moins performant"
+        return "Examiner un risque de performance"
+
+    if item_type == "OPPORTUNITY":
+        if source == "SEARCH_TERMS":
+            return "Évaluer une opportunité de mot-clé"
+        if source == "DEVICE":
+            return "Surveiller un appareil performant"
+        if source == "NETWORK":
+            return "Surveiller un réseau performant"
+        return "Évaluer une opportunité"
+
+    if item_type == "DEVICE_WINNER":
+        return "Surveiller l'appareil gagnant"
+
+    if item_type == "NETWORK_WINNER":
+        return "Surveiller le réseau gagnant"
+
+    if item_type == "KEYWORD_WINNER":
+        return "Conserver un mot-clé performant"
+
+    if item_type == "SEARCH_TERM_WINNER":
+        return "Surveiller un terme de recherche performant"
+
+    if item_type == "AD_WINNER":
+        return "Conserver l'annonce gagnante"
+
+    return "Examiner la recommandation"
+
+
+def _action_plan_impact(priority, item_type):
+    """Estimation interne et indicative de l'impact métier."""
+
+    if priority == "HIGH":
+        return "HIGH"
+
+    if priority == "MEDIUM":
+        return "MEDIUM"
+
+    if item_type in {"RISK", "OPPORTUNITY"}:
+        return "MEDIUM"
+
+    return "LOW"
+
+
+def _action_plan_effort(item_type, source):
+    """Estimation interne et indicative de l'effort d'analyse."""
+
+    if item_type in {
+        "DEVICE_WINNER",
+        "NETWORK_WINNER",
+        "KEYWORD_WINNER",
+        "SEARCH_TERM_WINNER",
+        "AD_WINNER",
+    }:
+        return "LOW"
+
+    if source == "SEARCH_TERMS":
+        return "LOW"
+
+    if source in {"DEVICE", "NETWORK"}:
+        return "MEDIUM"
+
+    return "MEDIUM"
+
+
+def _action_plan_status(priority):
+    """Indique si le point mérite une action ou une surveillance."""
+
+    if priority in {"HIGH", "MEDIUM"}:
+        return "TO_REVIEW"
+
+    if priority == "LOW":
+        return "MONITOR"
+
+    return "INFORMATION"
+
+
+def _action_plan_add_unique(
+    action_items,
+    seen_keys,
+    item,
+):
+    """
+    Ajoute un point seulement si la source et la cible ne sont pas déjà
+    présentes. Cela évite, par exemple, deux recommandations DESKTOP.
+    """
+
+    source = _action_plan_normalize_value(
+        item.get("source")
+    )
+    target = _action_plan_normalize_value(
+        item.get("target")
+    )
+
+    if not target:
+        target = _action_plan_normalize_value(
+            item.get("action")
+        )
+
+    deduplication_key = (
+        source,
+        target,
+    )
+
+    if deduplication_key in seen_keys:
+        return False
+
+    seen_keys.add(deduplication_key)
+    action_items.append(item)
+    return True
+
 
 @app.get("/action-plan")
 def action_plan(
@@ -9659,19 +9800,33 @@ def action_plan(
     ),
     campaign_id: str = Query(
         ...,
-        description="ID de la campagne",
+        description="ID de la campagne Google Ads",
     ),
     period: str = Query(
         default="LAST_30_DAYS",
+        description="Période Google Ads prédéfinie.",
     ),
     start_date: Optional[str] = Query(
         default=None,
+        description="Date de début au format YYYY-MM-DD.",
     ),
     end_date: Optional[str] = Query(
         default=None,
+        description="Date de fin au format YYYY-MM-DD.",
+    ),
+    include_monitoring: bool = Query(
+        default=True,
+        description=(
+            "Inclure les gagnants et les points de surveillance."
+        ),
     ),
 ):
     try:
+        # ----------------------------------------------------
+        # RÉCUPÉRATION DE ACCOUNT INSIGHTS
+        # Le helper résout aussi les valeurs Query(...) lors
+        # de l'appel Python direct.
+        # ----------------------------------------------------
 
         insights_result = _account_insights_safe_call(
             "account_insights",
@@ -9683,156 +9838,218 @@ def action_plan(
             end_date=end_date,
         )
 
-        if insights_result["status"] != "SUCCESS":
+        if insights_result.get("status") != "SUCCESS":
             return insights_result
 
-        insights = insights_result["data"]
+        insights = insights_result.get("data") or {}
 
-        health = insights.get(
-            "health",
-            {},
-        )
-
-        opportunities = insights.get(
-            "opportunities",
-            [],
-        )
-
-        risks = insights.get(
-            "risks",
-            [],
-        )
-
-        best_performers = insights.get(
-            "best_performers",
-            {},
-        )
+        health = insights.get("health") or {}
+        opportunities = insights.get("opportunities") or []
+        risks = insights.get("risks") or []
+        best_performers = insights.get("best_performers") or {}
 
         action_items = []
+        seen_keys = set()
 
-        # =====================================================
+        # ----------------------------------------------------
         # OPPORTUNITÉS
-        # =====================================================
+        # ----------------------------------------------------
 
         for opportunity in opportunities:
-
-            action_items.append(
-                {
-                    "type": "OPPORTUNITY",
-                    "priority": opportunity.get(
-                        "priority",
-                        "INFO",
-                    ),
-                    "source": opportunity.get(
-                        "source"
-                    ),
-                    "title": (
-                        "Opportunité détectée"
-                    ),
-                    "target": opportunity.get(
-                        "opportunity"
-                    ),
-                    "action": opportunity.get(
-                        "recommendation"
-                    ),
-                }
+            source = opportunity.get("source") or "UNKNOWN"
+            priority = opportunity.get("priority") or "INFO"
+            target = opportunity.get("opportunity")
+            recommendation = (
+                opportunity.get("recommendation")
+                or "Évaluer cette opportunité avant toute décision."
             )
 
-        # =====================================================
+            item_type = "OPPORTUNITY"
+
+            item = {
+                "type": item_type,
+                "priority": priority,
+                "source": source,
+                "status": _action_plan_status(priority),
+                "title": _action_plan_title(
+                    item_type,
+                    source,
+                ),
+                "target": target,
+                "action": recommendation,
+                "business_impact": _action_plan_impact(
+                    priority,
+                    item_type,
+                ),
+                "estimated_effort": _action_plan_effort(
+                    item_type,
+                    source,
+                ),
+                "executable": False,
+            }
+
+            _action_plan_add_unique(
+                action_items,
+                seen_keys,
+                item,
+            )
+
+        # ----------------------------------------------------
         # RISQUES
-        # =====================================================
+        # ----------------------------------------------------
 
         for risk in risks:
-
-            action_items.append(
-                {
-                    "type": "RISK",
-                    "priority": risk.get(
-                        "priority",
-                        "INFO",
-                    ),
-                    "source": risk.get(
-                        "source"
-                    ),
-                    "title": (
-                        "Risque détecté"
-                    ),
-                    "target": risk.get(
-                        "risk"
-                    ),
-                    "action": risk.get(
-                        "recommended_action"
-                    ),
-                }
+            source = risk.get("source") or "UNKNOWN"
+            priority = risk.get("priority") or "INFO"
+            target = risk.get("risk")
+            recommendation = (
+                risk.get("recommended_action")
+                or "Analyser ce risque avant toute décision."
             )
 
-        # =====================================================
-        # APPAREIL GAGNANT
-        # =====================================================
+            item_type = "RISK"
 
-        top_device = best_performers.get(
-            "device_by_roas"
-        )
+            item = {
+                "type": item_type,
+                "priority": priority,
+                "source": source,
+                "status": _action_plan_status(priority),
+                "title": _action_plan_title(
+                    item_type,
+                    source,
+                ),
+                "target": target,
+                "action": recommendation,
+                "business_impact": _action_plan_impact(
+                    priority,
+                    item_type,
+                ),
+                "estimated_effort": _action_plan_effort(
+                    item_type,
+                    source,
+                ),
+                "estimated_wasted_cost": risk.get(
+                    "estimated_wasted_cost",
+                    0,
+                ),
+                "executable": False,
+            }
 
-        if top_device:
+            _action_plan_add_unique(
+                action_items,
+                seen_keys,
+                item,
+            )
 
-            action_items.append(
+        # ----------------------------------------------------
+        # POINTS DE SURVEILLANCE
+        # Ils sont ajoutés seulement si la même cible/source
+        # n'existe pas déjà dans les opportunités ou risques.
+        # ----------------------------------------------------
+
+        if include_monitoring:
+            monitoring_definitions = [
                 {
+                    "performer_key": "device_by_roas",
                     "type": "DEVICE_WINNER",
-                    "priority": "INFO",
                     "source": "DEVICE",
-                    "title": (
-                        "Appareil performant"
-                    ),
-                    "target": top_device.get(
-                        "device"
-                    ),
+                    "target_key": "device",
                     "action": (
-                        "Continuer la "
-                        "surveillance de cet "
-                        "appareil performant."
+                        "Continuer la surveillance de cet appareil "
+                        "et confirmer que le volume reste stable."
                     ),
-                    "roas": top_device.get(
-                        "roas"
-                    ),
-                }
-            )
-
-        # =====================================================
-        # MOT-CLÉ GAGNANT
-        # =====================================================
-
-        best_keyword = best_performers.get(
-            "keyword_by_roas"
-        )
-
-        if best_keyword:
-
-            action_items.append(
+                },
                 {
-                    "type": "KEYWORD_WINNER",
-                    "priority": "INFO",
-                    "source": "KEYWORD",
-                    "title": (
-                        "Mot-clé performant"
-                    ),
-                    "target": best_keyword.get(
-                        "keyword"
-                    ),
+                    "performer_key": "network_by_roas",
+                    "type": "NETWORK_WINNER",
+                    "source": "NETWORK",
+                    "target_key": "network",
                     "action": (
-                        "Conserver ce "
-                        "mot-clé dans les "
-                        "analyses futures."
+                        "Continuer la surveillance de ce réseau "
+                        "et confirmer la qualité des conversions."
                     ),
-                    "roas": best_keyword.get(
-                        "roas"
+                },
+                {
+                    "performer_key": "keyword_by_roas",
+                    "type": "KEYWORD_WINNER",
+                    "source": "KEYWORD",
+                    "target_key": "keyword",
+                    "action": (
+                        "Conserver ce mot-clé dans le suivi et "
+                        "confirmer sa stabilité sur plusieurs périodes."
                     ),
-                }
-            )
+                },
+                {
+                    "performer_key": "search_term_by_roas",
+                    "type": "SEARCH_TERM_WINNER",
+                    "source": "SEARCH_TERMS",
+                    "target_key": "search_term",
+                    "action": (
+                        "Continuer la surveillance de ce terme de "
+                        "recherche et éviter de créer un doublon."
+                    ),
+                },
+                {
+                    "performer_key": "ad_by_roas",
+                    "type": "AD_WINNER",
+                    "source": "AD",
+                    "target_key": "ad_id",
+                    "action": (
+                        "Conserver cette annonce comme référence et "
+                        "surveiller la stabilité de son ROAS."
+                    ),
+                },
+            ]
 
-        # =====================================================
+            for definition in monitoring_definitions:
+                performer = best_performers.get(
+                    definition["performer_key"]
+                )
+
+                if not performer:
+                    continue
+
+                target = performer.get(
+                    definition["target_key"]
+                )
+
+                if target is None:
+                    continue
+
+                item_type = definition["type"]
+                source = definition["source"]
+
+                item = {
+                    "type": item_type,
+                    "priority": "INFO",
+                    "source": source,
+                    "status": "INFORMATION",
+                    "title": _action_plan_title(
+                        item_type,
+                        source,
+                    ),
+                    "target": target,
+                    "action": definition["action"],
+                    "business_impact": "LOW",
+                    "estimated_effort": "LOW",
+                    "roas": performer.get("roas"),
+                    "cpa": performer.get("cpa"),
+                    "conversions": performer.get("conversions"),
+                    "executable": False,
+                }
+
+                _action_plan_add_unique(
+                    action_items,
+                    seen_keys,
+                    item,
+                )
+
+        # ----------------------------------------------------
         # TRI
-        # =====================================================
+        # 1. Priorité
+        # 2. Impact métier
+        # 3. Effort, les actions faciles passent en premier
+        # ----------------------------------------------------
 
         priority_order = {
             "HIGH": 1,
@@ -9841,93 +10058,135 @@ def action_plan(
             "INFO": 4,
         }
 
+        impact_order = {
+            "HIGH": 1,
+            "MEDIUM": 2,
+            "LOW": 3,
+        }
+
+        effort_order = {
+            "LOW": 1,
+            "MEDIUM": 2,
+            "HIGH": 3,
+        }
+
         action_items.sort(
             key=lambda item: (
                 priority_order.get(
-                    item.get(
-                        "priority",
-                        "INFO",
-                    ),
+                    item.get("priority"),
                     99,
-                )
+                ),
+                impact_order.get(
+                    item.get("business_impact"),
+                    99,
+                ),
+                effort_order.get(
+                    item.get("estimated_effort"),
+                    99,
+                ),
             )
         )
 
-        # =====================================================
-        # RENUMÉROTATION
-        # =====================================================
+        # ----------------------------------------------------
+        # RENUMÉROTATION ET LIBELLÉ
+        # ----------------------------------------------------
 
         for rank, item in enumerate(
             action_items,
             start=1,
         ):
             item["rank"] = rank
+            item["point_label"] = f"Point {rank}"
 
-        # =====================================================
-        # RÉSUMÉ TEXTE
-        # =====================================================
+        action_required_items = [
+            item
+            for item in action_items
+            if item.get("status") == "TO_REVIEW"
+        ]
+
+        monitoring_items = [
+            item
+            for item in action_items
+            if item.get("status") in {
+                "MONITOR",
+                "INFORMATION",
+            }
+        ]
+
+        # ----------------------------------------------------
+        # RÉSUMÉS LISIBLES
+        # ----------------------------------------------------
 
         summary = []
 
         for item in action_items:
+            target_text = (
+                f" | Cible : {item['target']}"
+                if item.get("target") is not None
+                else ""
+            )
 
             summary.append(
                 (
-                    f"{item['rank']}. "
-                    f"{item['title']} "
-                    f"({item['priority']}) - "
-                    f"{item['action']}"
+                    f"{item['rank']}. {item['title']} "
+                    f"[{item['priority']}]"
+                    f"{target_text} | "
+                    f"Action : {item['action']}"
                 )
             )
 
-        # =====================================================
-        # RETOUR
-        # =====================================================
+        if action_items:
+            available_points = ", ".join(
+                str(item["rank"])
+                for item in action_items
+            )
+            copilot_prompt = (
+                "Quel point souhaites-tu examiner ? "
+                f"Points disponibles : {available_points}."
+            )
+        else:
+            copilot_prompt = (
+                "Aucun point d'action n'a été détecté pour cette période."
+            )
 
         return {
             "status": "SUCCESS",
             "mode": "ACTION_PLAN",
             "automatic_action": False,
             "requires_human_confirmation": True,
-
+            "read_only": True,
             "customer_id": customer_id,
             "campaign_id": campaign_id,
-
-            "campaign_name": insights.get(
-                "campaign_name"
+            "campaign_name": insights.get("campaign_name"),
+            "date_range": insights.get("date_range"),
+            "health_score": health.get("score"),
+            "health_label": health.get("label"),
+            "confidence": health.get("confidence"),
+            "coverage_percent": health.get("coverage_percent"),
+            "total_actions": len(action_items),
+            "actions_requiring_review": len(
+                action_required_items
             ),
-
-            "health_score": health.get(
-                "score"
-            ),
-
-            "health_label": health.get(
-                "label"
-            ),
-
-            "total_actions": len(
-                action_items
-            ),
-
-            "action_items": (
-                action_items
-            ),
-
+            "monitoring_points": len(monitoring_items),
+            "action_items": action_items,
             "summary": summary,
-
-            "copilot_prompt": (
-                "Quel point souhaites-tu "
-                "examiner ?"
+            "copilot_prompt": copilot_prompt,
+            "disclaimer": (
+                "Ce plan est généré en lecture seule. Les niveaux "
+                "d'impact et d'effort sont des estimations internes. "
+                "Aucune modification Google Ads n'est exécutée."
             ),
         }
 
     except Exception as error:
-
         return {
             "status": "FAILED",
+            "mode": "ACTION_PLAN",
             "automatic_action": False,
+            "read_only": True,
             "error": str(error),
         }
+
 # ============================================================
 # OPTIMIZATION OPPORTUNITIES
 # Analyse à la demande d'une campagne précise
