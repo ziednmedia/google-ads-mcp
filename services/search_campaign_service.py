@@ -46,15 +46,14 @@ class SearchCampaignService:
 
             "language":
                 account_sheet["C10"].value,
-
-            "locations":
-                (
-                    account_sheet["C11"]
-                    .value
-                    .split(";")
-                    if account_sheet["C11"].value
-                    else []
-                ),
+           
+            "locations": [
+                location.strip()
+                for location in (
+                account_sheet["C11"].value or ""
+                ).split(";")
+                if location.strip()
+            ],
 
             "network":
                 account_sheet["C12"].value,
@@ -79,7 +78,11 @@ class SearchCampaignService:
                 account_sheet["C17"].value,
         }
 
-                ad_groups_sheet = workbook[
+# -------------------------------------
+# AD GROUPS
+# -------------------------------------
+
+        ad_groups_sheet = workbook[
             "Ad Groups"
         ]
 
