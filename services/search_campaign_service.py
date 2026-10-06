@@ -1,6 +1,4 @@
 from openpyxl import load_workbook
-import re
-
 
 class SearchCampaignService:
 
@@ -19,18 +17,8 @@ class SearchCampaignService:
 
         if not value:
             return None
+        return str(value).strip()
 
-        text = str(value)
-
-        match = re.search(
-            r"https://[^\", ]+",
-            text,
-        )
-
-        if match:
-            return match.group(0)
-
-        return text.strip()
 # -------------------------------------
 # READ EXCEL
 # -------------------------------------
