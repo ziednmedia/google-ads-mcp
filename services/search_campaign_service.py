@@ -115,9 +115,12 @@ class SearchCampaignService:
                         ].value,
 
                     "final_url":
-                        ad_groups_sheet[
-                            f"C{row}"
-                        ].value,
+                        SearchCampaignService
+                        ._clean_url(
+                            ad_groups_sheet[
+                                f"C{row}"
+                            ].value
+                    ),
 
                     "path1":
                         ad_groups_sheet[
@@ -231,10 +234,15 @@ class SearchCampaignService:
                             f"I{row}"
                         ].value,
 
-                    "final_url":
-                        ads_sheet[
-                            f"K{row}"
-                        ].value,
+                    
+                    final_url = (
+                        SearchCampaignService
+                        ._clean_url(
+                            ads_sheet[
+                                f"K{row}"
+                            ].value
+                        )
+                    )
 
                     "label":
                         ads_sheet[
