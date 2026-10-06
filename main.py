@@ -9695,7 +9695,7 @@ def _action_plan_title(item_type, source):
         return "Surveiller l'appareil gagnant"
 
     if item_type == "NETWORK_WINNER":
-        return "Surveiller le réseau gagnant"
+        return "Surveiller le réseau principal"
 
     if item_type == "KEYWORD_WINNER":
         return "Conserver un mot-clé performant"
@@ -10009,6 +10009,19 @@ def action_plan(
                 if not performer:
                     continue
 
+                minimum_conversions_for_winner = 3
+
+                if definition["type"] in {
+                    "KEYWORD_WINNER",
+                    "SEARCH_TERM_WINNER",
+                    "AD_WINNER",
+                }:
+                    if (
+                        performer.get("conversions", 0)
+                        < minimum_conversions_for_winner
+                    ):
+                        continue
+
                 target = performer.get(
                     definition["target_key"]
                 )
@@ -10168,6 +10181,9 @@ def action_plan(
                 action_required_items
             ),
             "monitoring_points": len(monitoring_items),
+            "thresholds": {
+                "minimum_conversions_for_winner": 3,
+            },
             "action_items": action_items,
             "summary": summary,
             "copilot_prompt": copilot_prompt,
