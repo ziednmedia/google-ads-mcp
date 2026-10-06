@@ -11,6 +11,26 @@ class SearchCampaignService:
             "status": "SUCCESS",
             "module": "SEARCH"
         }
+        
+    @staticmethod
+    def _clean_url(
+        value,
+    ):
+
+        if not value:
+            return None
+
+        text = str(value)
+
+        match = re.search(
+            r"https://[^\", ]+",
+            text,
+        )
+
+        if match:
+            return match.group(0)
+
+        return text.strip()
 # -------------------------------------
 # READ EXCEL
 # -------------------------------------
