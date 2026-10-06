@@ -321,7 +321,126 @@ class SearchCampaignService:
             ads_list.append(
                 ad
             )
+# -------------------------------------
+# KEYWORDS
+# -------------------------------------
 
+        keywords_sheet = workbook[
+            "Keywords"
+        ]
+
+        keywords = []
+
+        for row in range(
+            4,
+            keywords_sheet.max_row + 1,
+        ):
+
+            campaign_name = (
+                keywords_sheet[
+                    f"A{row}"
+                ].value
+            )
+
+            if not campaign_name:
+                continue
+
+            keywords.append(
+                {
+                    "campaign_name":
+                        campaign_name,
+
+                    "ad_group_name":
+                        keywords_sheet[
+                            f"B{row}"
+                        ].value,
+
+                    "keyword":
+                        keywords_sheet[
+                            f"C{row}"
+                        ].value,
+
+                    "match_type":
+                        keywords_sheet[
+                            f"D{row}"
+                        ].value,
+
+                    "negative":
+                        keywords_sheet[
+                            f"E{row}"
+                        ].value,
+
+                    "status":
+                        keywords_sheet[
+                            f"G{row}"
+                        ].value,
+                }
+            )
+# -------------------------------------
+# SITELINKS
+# -------------------------------------
+        sitelinks_sheet = workbook[
+            "Sitelinks"
+        ]
+
+        sitelinks = []
+
+        for row in range(
+            4,
+            sitelinks_sheet.max_row + 1,
+        ):
+
+            campaign_name = (
+                sitelinks_sheet[
+                    f"A{row}"
+                ].value
+            )
+
+            if not campaign_name:
+                continue
+
+            sitelinks.append(
+                {
+                    "campaign_name":
+                        campaign_name,
+
+                    "title":
+                        sitelinks_sheet[
+                            f"B{row}"
+                        ].value,
+
+                    "description_1":
+                        sitelinks_sheet[
+                            f"D{row}"
+                        ].value,
+
+                    "description_2":
+                        sitelinks_sheet[
+                            f"F{row}"
+                        ].value,
+
+                    "final_url":
+                        SearchCampaignService
+                        ._clean_url(
+                            sitelinks_sheet[
+                                f"H{row}"
+                            ].value
+                        ),
+
+                    "level":
+                        sitelinks_sheet[
+                            f"I{row}"
+                        ].value,
+
+                    "ad_group":
+                        sitelinks_sheet[
+                            f"J{row}"
+                        ].value,
+                }
+            )
+
+
+        
 
         return {
             "worksheets":
@@ -335,6 +454,12 @@ class SearchCampaignService:
 
             "ads":
                 ads_list,
+            
+            "keywords":
+                keywords,
+ 
+            "sitelinks":
+                sitelinks,
 
             "summary": {
                 "ad_groups_count":
@@ -358,6 +483,12 @@ class SearchCampaignService:
                           ]
                         for ad in ads_list
                     ),
+                
+            "keywords_count":
+                    len(keywords),
+
+            "sitelinks_count":
+                    len(sitelinks),
             },
         }
 
