@@ -9644,6 +9644,290 @@ def executive_summary(
             "automatic_action": False,
             "error": str(error),
         }
+
+# ============================================================
+# ACTION PLAN
+# Plan d'action dynamique basé sur account-insights
+# Lecture seule
+# ============================================================
+
+@app.get("/action-plan")
+def action_plan(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+    ),
+):
+    try:
+
+        insights_result = _account_insights_safe_call(
+            "account_insights",
+            account_insights,
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if insights_result["status"] != "SUCCESS":
+            return insights_result
+
+        insights = insights_result["data"]
+
+        health = insights.get(
+            "health",
+            {},
+        )
+
+        opportunities = insights.get(
+            "opportunities",
+            [],
+        )
+
+        risks = insights.get(
+            "risks",
+            [],
+        )
+
+        best_performers = insights.get(
+            "best_performers",
+            {},
+        )
+
+        action_items = []
+
+        # =====================================================
+        # OPPORTUNITÉS
+        # =====================================================
+
+        for opportunity in opportunities:
+
+            action_items.append(
+                {
+                    "type": "OPPORTUNITY",
+                    "priority": opportunity.get(
+                        "priority",
+                        "INFO",
+                    ),
+                    "source": opportunity.get(
+                        "source"
+                    ),
+                    "title": (
+                        "Opportunité détectée"
+                    ),
+                    "target": opportunity.get(
+                        "opportunity"
+                    ),
+                    "action": opportunity.get(
+                        "recommendation"
+                    ),
+                }
+            )
+
+        # =====================================================
+        # RISQUES
+        # =====================================================
+
+        for risk in risks:
+
+            action_items.append(
+                {
+                    "type": "RISK",
+                    "priority": risk.get(
+                        "priority",
+                        "INFO",
+                    ),
+                    "source": risk.get(
+                        "source"
+                    ),
+                    "title": (
+                        "Risque détecté"
+                    ),
+                    "target": risk.get(
+                        "risk"
+                    ),
+                    "action": risk.get(
+                        "recommended_action"
+                    ),
+                }
+            )
+
+        # =====================================================
+        # APPAREIL GAGNANT
+        # =====================================================
+
+        top_device = best_performers.get(
+            "device_by_roas"
+        )
+
+        if top_device:
+
+            action_items.append(
+                {
+                    "type": "DEVICE_WINNER",
+                    "priority": "INFO",
+                    "source": "DEVICE",
+                    "title": (
+                        "Appareil performant"
+                    ),
+                    "target": top_device.get(
+                        "device"
+                    ),
+                    "action": (
+                        "Continuer la "
+                        "surveillance de cet "
+                        "appareil performant."
+                    ),
+                    "roas": top_device.get(
+                        "roas"
+                    ),
+                }
+            )
+
+        # =====================================================
+        # MOT-CLÉ GAGNANT
+        # =====================================================
+
+        best_keyword = best_performers.get(
+            "keyword_by_roas"
+        )
+
+        if best_keyword:
+
+            action_items.append(
+                {
+                    "type": "KEYWORD_WINNER",
+                    "priority": "INFO",
+                    "source": "KEYWORD",
+                    "title": (
+                        "Mot-clé performant"
+                    ),
+                    "target": best_keyword.get(
+                        "keyword"
+                    ),
+                    "action": (
+                        "Conserver ce "
+                        "mot-clé dans les "
+                        "analyses futures."
+                    ),
+                    "roas": best_keyword.get(
+                        "roas"
+                    ),
+                }
+            )
+
+        # =====================================================
+        # TRI
+        # =====================================================
+
+        priority_order = {
+            "HIGH": 1,
+            "MEDIUM": 2,
+            "LOW": 3,
+            "INFO": 4,
+        }
+
+        action_items.sort(
+            key=lambda item: (
+                priority_order.get(
+                    item.get(
+                        "priority",
+                        "INFO",
+                    ),
+                    99,
+                )
+            )
+        )
+
+        # =====================================================
+        # RENUMÉROTATION
+        # =====================================================
+
+        for rank, item in enumerate(
+            action_items,
+            start=1,
+        ):
+            item["rank"] = rank
+
+        # =====================================================
+        # RÉSUMÉ TEXTE
+        # =====================================================
+
+        summary = []
+
+        for item in action_items:
+
+            summary.append(
+                (
+                    f"{item['rank']}. "
+                    f"{item['title']} "
+                    f"({item['priority']}) - "
+                    f"{item['action']}"
+                )
+            )
+
+        # =====================================================
+        # RETOUR
+        # =====================================================
+
+        return {
+            "status": "SUCCESS",
+            "mode": "ACTION_PLAN",
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+
+            "campaign_name": insights.get(
+                "campaign_name"
+            ),
+
+            "health_score": health.get(
+                "score"
+            ),
+
+            "health_label": health.get(
+                "label"
+            ),
+
+            "total_actions": len(
+                action_items
+            ),
+
+            "action_items": (
+                action_items
+            ),
+
+            "summary": summary,
+
+            "copilot_prompt": (
+                "Quel point souhaites-tu "
+                "examiner ?"
+            ),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error),
+        }
 # ============================================================
 # OPTIMIZATION OPPORTUNITIES
 # Analyse à la demande d'une campagne précise
