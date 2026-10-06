@@ -445,7 +445,7 @@ class SearchCampaignService:
             
             "keywords":
                 keywords,
- 
+            
             "sitelinks":
                 sitelinks,
 
@@ -453,10 +453,10 @@ class SearchCampaignService:
                 "ad_groups_count":
                     len(ad_groups),
 
-            "ads_count":
+                "ads_count":
                     len(ads_list),
 
-            "headlines_count":
+                "headlines_count":
                     sum(
                         ad[
                             "headlines_count"
@@ -464,7 +464,7 @@ class SearchCampaignService:
                         for ad in ads_list
                     ),
 
-            "descriptions_count":
+                "descriptions_count":
                     sum(
                         ad[
                             "descriptions_count"
@@ -472,10 +472,10 @@ class SearchCampaignService:
                         for ad in ads_list
                     ),
                 
-            "keywords_count":
+                "keywords_count":
                     len(keywords),
 
-            "sitelinks_count":
+                "sitelinks_count":
                     len(sitelinks),
             },
         }
