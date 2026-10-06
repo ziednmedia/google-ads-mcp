@@ -1,4 +1,5 @@
 from openpyxl import load_workbook
+import re
 
 
 class SearchCampaignService:
@@ -114,13 +115,14 @@ class SearchCampaignService:
                             f"B{row}"
                         ].value,
 
+                    
                     "final_url":
                         SearchCampaignService
                         ._clean_url(
                             ad_groups_sheet[
                                 f"C{row}"
                             ].value
-                    ),
+                        ),
 
                     "path1":
                         ad_groups_sheet[
@@ -234,15 +236,13 @@ class SearchCampaignService:
                             f"I{row}"
                         ].value,
 
-                    
-                    final_url = (
+                    "final_url":
                         SearchCampaignService
                         ._clean_url(
                             ads_sheet[
                                 f"K{row}"
                             ].value
-                        )
-                    )
+                        ),
 
                     "label":
                         ads_sheet[
@@ -303,20 +303,6 @@ class SearchCampaignService:
             )
 
 
-        
-        return {
-            "worksheets":
-                workbook.sheetnames,
-
-            "campaign":
-                campaign,
-
-            "ad_groups":
-                ad_groups,
-            
-            "ads":
-                ads_list,
-        }
         return {
             "worksheets":
                 workbook.sheetnames,
