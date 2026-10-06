@@ -715,7 +715,8 @@ class SearchCampaignService:
             )
 
             normalized_name = (
-                name.casefold               errors.append(
+                name.casefold               
+                errors.append(
                     {
                         "section":
                             "AD_GROUPS",
