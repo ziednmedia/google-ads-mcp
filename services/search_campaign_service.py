@@ -427,19 +427,13 @@ class SearchCampaignService:
                 }
             )
 
-
-        
-
         return {
             "status":
                 "READY_FOR_REVIEW",
- 
             "read_only":
                 True,
- 
             "automatic_action":
                 False,
- 
             "requires_human_confirmation":
                 True,
             
