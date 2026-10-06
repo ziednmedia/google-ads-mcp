@@ -23,7 +23,7 @@ class SearchCampaignService:
     @staticmethod
     def _clean_text(
         value: Any,
-    ) -> Optional[str\]:
+    ) -> Optional[str]:
 
         if value is None:
             return None
@@ -41,7 +41,7 @@ class SearchCampaignService:
     @staticmethod
     def _format_date(
         value: Any,
-    ) -> Optional[str\]:
+    ) -> Optional[str]:
 
         if value is None:
             return None
@@ -71,7 +71,7 @@ class SearchCampaignService:
     @staticmethod
     def _split_locations(
         value: Any,
-    ) -> list[str\]:
+    ) -> list[str]:
 
         if value is None:
             return []
@@ -87,7 +87,7 @@ class SearchCampaignService:
     @staticmethod
     def _remove_duplicates(
         values: list[str],
-    ) -> list[str\]:
+    ) -> list[str]:
 
         unique_values = []
         seen_values = set()
