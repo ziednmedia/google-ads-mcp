@@ -9402,6 +9402,27 @@ def executive_summary(
             {}
         )
 
+        health_score = health.get(
+    "score",
+    0
+)
+
+if health_score >= 90:
+    executive_grade = "A"
+    campaign_status = "WINNER"
+
+elif health_score >= 75:
+    executive_grade = "B"
+    campaign_status = "GOOD"
+
+elif health_score >= 60:
+    executive_grade = "C"
+    campaign_status = "NEEDS_ATTENTION"
+
+else:
+    executive_grade = "D"
+    campaign_status = "AT_RISK"
+
         best = insights.get(
             "best_performers",
             {}
@@ -9414,6 +9435,25 @@ def executive_summary(
         biggest_opportunity = summary.get(
             "biggest_opportunity"
         )
+
+        recommended_next_action = None
+
+if biggest_opportunity:
+
+    recommended_next_action = (
+        biggest_opportunity.get(
+            "recommendation"
+        )
+    )
+
+elif biggest_risk:
+
+    recommended_next_action = (
+        biggest_risk.get(
+            "recommended_action"
+        )
+    )
+
 
         top_ad = best.get(
             "ad_by_roas"
@@ -9476,6 +9516,14 @@ def executive_summary(
 
         executive_text = " ".join(lines)
 
+        executive_verdict = (
+            f"{insights.get('campaign_name')} | "
+            f"{health.get('label')} | "
+            f"ROAS {campaign.get('roas')} | "
+            f"CPA {campaign.get('cpa')}$"
+        )
+
+
         return {
             "status": "SUCCESS",
             "mode": "EXECUTIVE_SUMMARY",
@@ -9498,6 +9546,22 @@ def executive_summary(
 
             "confidence": health.get(
                 "confidence"
+            ),
+
+            "executive_grade": (
+                executive_grade
+             ),
+
+            "campaign_status": (
+               campaign_status
+             ),
+
+           "recommended_next_action": (
+               recommended_next_action
+            ),
+
+           "executive_verdict": (
+               executive_verdict
             ),
 
             "roas": campaign.get(
