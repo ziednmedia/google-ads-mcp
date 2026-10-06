@@ -685,7 +685,7 @@ class SearchCampaignService:
 
         return errors
 
-        @staticmethod
+    @staticmethod
     def _validate_ad_groups(
         ad_groups: list[dict],
     ) -> list[dict]:
@@ -715,12 +715,12 @@ class SearchCampaignService:
             )
 
             normalized_name = (
-                name.casefold()
+                name.strip().casefold()
                 if name
-                else ""
+                else None
             )
 
-            if not name:
+            if not normalized_name:
 
                 errors.append(
                     {
@@ -761,7 +761,6 @@ class SearchCampaignService:
                 )
 
             else:
-
                 seen_names.add(
                     normalized_name
                 )
@@ -868,7 +867,7 @@ class SearchCampaignService:
 
         return errors
 
-        @staticmethod
+    @staticmethod
     def _validate_ads(
         ads: list[dict],
     ) -> list[dict]:
@@ -988,6 +987,145 @@ class SearchCampaignService:
 
                         "actual":
                             len(descriptions),
+                    }
+                )
+
+            for position, headline in enumerate(
+                headlines,
+                start=1,
+            ):
+
+                if len(headline) > 30:
+
+                    errors.append(
+                        {
+                            "section":
+                                "ADS",
+
+                            "ad_group":
+                                ad_group_name,
+
+                            "field":
+                                f"headline_{position}",
+
+                            "error":
+                                "HEADLINE_TOO_LONG",
+
+                            "maximum":
+                                30,
+
+                            "actual":
+                                len(headline),
+
+                            "value":
+                                headline,
+                        }
+                    )
+
+                if "!" in headline:
+
+                    errors.append(
+                        {
+                            "section":
+                                "ADS",
+
+                            "ad_group":
+                                ad_group_name,
+
+                            "field":
+                                f"headline_{position}",
+
+                            "error":
+                                "EXCLAMATION_NOT_ALLOWED_IN_HEADLINE",
+
+                            "value":
+                                headline,
+                        }
+                    )
+
+            total_exclamation_marks = 0
+
+            for position, description in enumerate(
+                descriptions,
+                start=1,
+            ):
+
+                if len(description) > 90:
+
+                    errors.append(
+                        {
+                            "section":
+                                "ADS",
+
+                            "ad_group":
+                                ad_group_name,
+
+                            "field":
+                                f"description_{position}",
+
+                            "error":
+                                "DESCRIPTION_TOO_LONG",
+
+                            "maximum":
+                                90,
+
+                            "actual":
+                                len(
+                                    description
+                                ),
+
+                            "value":
+                                description,
+                        }
+                    )
+
+                total_exclamation_marks += (
+                    description.count(
+                        "!"
+                    )
+                )
+
+            if total_exclamation_marks > 1:
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "descriptions",
+
+                        "error":
+                            "TOO_MANY_EXCLAMATION_MARKS",
+
+                        "maximum":
+                            1,
+
+                        "actual":
+                            total_exclamation_marks,
+                    }
+                )
+
+            if not ad.get(
+                "final_url"
+            ):
+
+                errors.append(
+                    {
+                        "section":
+                            "ADS",
+
+                        "ad_group":
+                            ad_group_name,
+
+                        "field":
+                            "final_url",
+
+                        "error":
+                            "FINAL_URL_REQUIRED",
                     }
                 )
 
