@@ -350,3 +350,187 @@ async def validate_search_campaign(
             "error":
                 str(error),
         }
+
+# ============================================================
+# END VALIDATE
+# ============================================================
+# ============================================================
+# PREVIEW
+# ============================================================
+@router.post("/preview")
+async def preview_search_campaign(
+    excel_file: UploadFile = File(...)
+):
+
+    try:
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".xlsx"
+        ) as temp_file:
+
+            contents = await excel_file.read()
+
+            temp_file.write(
+                contents
+            )
+
+            temp_path = (
+                temp_file.name
+            )
+
+        data = (
+            SearchCampaignService
+            .read_excel(
+                temp_path
+            )
+        )
+
+        campaign = data.get(
+            "campaign",
+            {}
+        )
+
+        ad_groups = data.get(
+            "ad_groups",
+            []
+        )
+
+        ads = data.get(
+            "ads",
+            []
+        )
+
+        keywords = data.get(
+            "keywords",
+            []
+        )
+
+        sitelinks = data.get(
+            "sitelinks",
+            []
+        )
+
+        total_objects = (
+            1
+            + len(ad_groups)
+            + len(ads)
+            + len(keywords)
+            + len(sitelinks)
+        )
+
+        return {
+
+            "status":
+                "READY_TO_CREATE",
+
+            "automatic_action":
+                False,
+
+            "requires_human_confirmation":
+                True,
+
+            "campaign": {
+                "campaign_name":
+                    campaign.get(
+                        "campaign_name"
+                    ),
+
+                "customer_id":
+                    campaign.get(
+                        "customer_id"
+                    ),
+
+                "objective":
+                    campaign.get(
+                        "objective"
+                    ),
+
+                "daily_budget":
+                    campaign.get(
+                        "daily_budget"
+                    ),
+
+                "language":
+                    campaign.get(
+                        "language"
+                    ),
+
+                "network":
+                    campaign.get(
+                        "network"
+                    ),
+
+                "locations":
+                    campaign.get(
+                        "locations",
+                        []
+                    ),
+            },
+
+            "operations": {
+
+                "campaigns": 1,
+
+                "ad_groups":
+                    len(
+                        ad_groups
+                    ),
+
+                "keywords":
+                    len(
+                        keywords
+                    ),
+
+                "ads":
+                    len(
+                        ads
+                    ),
+
+                "sitelinks":
+                    len(
+                        sitelinks
+                    ),
+            },
+
+            "estimated_objects": {
+                "total":
+                    total_objects
+            },
+
+            "preview": {
+
+                "ad_group_names": [
+                    group.get(
+                        "name"
+                    )
+                    for group
+                    in ad_groups
+                ],
+
+                "keywords_sample":
+                    keywords[:10],
+
+                "ads_sample":
+                    ads[:3],
+
+                "sitelinks_sample":
+                    sitelinks[:4],
+            },
+
+            "next_step":
+                "Utiliser /campaigns/search/create pour créer la campagne dans Google Ads."
+        }
+
+    except Exception as error:
+
+        return {
+            "status":
+                "FAILED",
+
+            "error":
+                str(error),
+        }
+# ============================================================
+# END PREVIEW
+# ============================================================
