@@ -6,6 +6,9 @@ from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from google.ads.googleads.client import GoogleAdsClient
 
+from campaigns.search import (
+    router as search_router,
+)
         
 class BudgetUpdateRequest(
         BaseModel
@@ -67,6 +70,10 @@ app = FastAPI(
         "et identifier des opportunités d'optimisation."
     ),
     openapi_version="3.0.2",
+)
+
+app.include_router(
+    search_router
 )
 
 # ============================================================
