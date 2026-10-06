@@ -1,3 +1,4 @@
 fastapi
 uvicorn
 google-ads
+openpyxl>=3.1.5
