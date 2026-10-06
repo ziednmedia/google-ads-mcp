@@ -9352,81 +9352,83 @@ def account_insights(
 def executive_summary(
     customer_id: str = Query(
         ...,
-        description="ID du compte Google Ads"
+        description="ID du compte Google Ads",
     ),
     campaign_id: str = Query(
         ...,
-        description="ID de la campagne"
+        description="ID de la campagne",
     ),
     period: str = Query(
-        default="LAST_30_DAYS"
+        default="LAST_30_DAYS",
     ),
     start_date: Optional[str] = Query(
-        default=None
+        default=None,
     ),
     end_date: Optional[str] = Query(
-        default=None
+        default=None,
     ),
 ):
     try:
 
-        insights_result = (
-            _account_insights_safe_call(
-                "account_insights",
-                account_insights,
-                customer_id=customer_id,
-                campaign_id=campaign_id,
-                period=period,
-                start_date=start_date,
-                end_date=end_date,
-            )
+        insights_result = _account_insights_safe_call(
+            "account_insights",
+            account_insights,
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
         )
 
-
         if insights_result["status"] != "SUCCESS":
-                return insights_result
+            return insights_result
+
         insights = insights_result["data"]
 
         health = insights.get(
             "health",
-            {}
+            {},
         )
 
         campaign = insights.get(
             "campaign_summary",
-            {}
+            {},
         )
 
         summary = insights.get(
             "executive_summary",
-            {}
+            {},
         )
 
-        health_score = health.get(
-    "score",
-    0
-)
+        best = insights.get(
+            "best_performers",
+            {},
+        )
 
-      if health_score >= 90:
+        # =====================================================
+        # V2
+        # =====================================================
+
+        health_score = health.get(
+            "score",
+            0,
+        )
+
+        if health_score >= 90:
             executive_grade = "A"
             campaign_status = "WINNER"
 
-      elif health_score >= 75:
+        elif health_score >= 75:
             executive_grade = "B"
             campaign_status = "GOOD"
 
-       elif health_score >= 60:
+        elif health_score >= 60:
             executive_grade = "C"
             campaign_status = "NEEDS_ATTENTION"
 
         else:
             executive_grade = "D"
             campaign_status = "AT_RISK"
-
-        best = insights.get(
-            "best_performers",
-            {}
-        )
 
         biggest_risk = summary.get(
             "biggest_risk"
@@ -9439,21 +9441,18 @@ def executive_summary(
         recommended_next_action = None
 
         if biggest_opportunity:
-
             recommended_next_action = (
                 biggest_opportunity.get(
                     "recommendation"
                 )
-        )
+            )
 
         elif biggest_risk:
-
             recommended_next_action = (
                 biggest_risk.get(
                     "recommended_action"
                 )
-        )
-
+            )
 
         top_ad = best.get(
             "ad_by_roas"
@@ -9514,7 +9513,9 @@ def executive_summary(
                 f"avec CPA de {top_ad.get('cpa')} $."
             )
 
-        executive_text = " ".join(lines)
+        executive_text = " ".join(
+            lines
+        )
 
         executive_verdict = (
             f"{insights.get('campaign_name')} | "
@@ -9522,7 +9523,6 @@ def executive_summary(
             f"ROAS {campaign.get('roas')} | "
             f"CPA {campaign.get('cpa')}$"
         )
-
 
         return {
             "status": "SUCCESS",
@@ -9532,6 +9532,7 @@ def executive_summary(
 
             "customer_id": customer_id,
             "campaign_id": campaign_id,
+
             "campaign_name": insights.get(
                 "campaign_name"
             ),
@@ -9550,18 +9551,18 @@ def executive_summary(
 
             "executive_grade": (
                 executive_grade
-             ),
-
-            "campaign_status": (
-               campaign_status
-             ),
-
-           "recommended_next_action": (
-               recommended_next_action
             ),
 
-           "executive_verdict": (
-               executive_verdict
+            "campaign_status": (
+                campaign_status
+            ),
+
+            "recommended_next_action": (
+                recommended_next_action
+            ),
+
+            "executive_verdict": (
+                executive_verdict
             ),
 
             "roas": campaign.get(
@@ -9576,7 +9577,9 @@ def executive_summary(
                 "conversions"
             ),
 
-            "biggest_risk": biggest_risk,
+            "biggest_risk": (
+                biggest_risk
+            ),
 
             "biggest_opportunity": (
                 biggest_opportunity
@@ -9590,20 +9593,26 @@ def executive_summary(
                 {
                     "type": "CAMPAIGN_HEALTH",
                     "value": (
-                        health.get("label")
-                    )
+                        health.get(
+                            "label"
+                        )
+                    ),
                 },
                 {
                     "type": "ROAS",
                     "value": (
-                        campaign.get("roas")
-                    )
+                        campaign.get(
+                            "roas"
+                        )
+                    ),
                 },
                 {
                     "type": "CPA",
                     "value": (
-                        campaign.get("cpa")
-                    )
+                        campaign.get(
+                            "cpa"
+                        )
+                    ),
                 },
                 {
                     "type": "RISK",
@@ -9613,7 +9622,7 @@ def executive_summary(
                         )
                         if biggest_risk
                         else None
-                    )
+                    ),
                 },
                 {
                     "type": "OPPORTUNITY",
@@ -9623,9 +9632,9 @@ def executive_summary(
                         )
                         if biggest_opportunity
                         else None
-                    )
-                }
-            ]
+                    ),
+                },
+            ],
         }
 
     except Exception as error:
@@ -9633,9 +9642,8 @@ def executive_summary(
         return {
             "status": "FAILED",
             "automatic_action": False,
-            "error": str(error)
+            "error": str(error),
         }
-
 # ============================================================
 # OPTIMIZATION OPPORTUNITIES
 # Analyse à la demande d'une campagne précise
