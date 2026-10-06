@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from fastapi import UploadFile
 from fastapi import File
+import tempfile
 
 from services.search_campaign_service import (
     SearchCampaignService,
@@ -23,10 +24,47 @@ async def create_search_from_excel(
     excel_file: UploadFile = File(...)
 ):
 
-    return {
-        "status": "SUCCESS",
-        "message": (
-            "Excel reçu avec succès."
-        ),
-        "filename": excel_file.filename,
-    }
+    try:
+
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=".xlsx"
+        ) as temp_file:
+
+            contents = await excel_file.read()
+
+            temp_file.write(
+                contents
+            )
+
+            temp_path = (
+                temp_file.name
+            )
+
+        result = (
+            SearchCampaignService
+            .read_excel(
+                temp_path
+            )
+        )
+
+        return {
+            "status":
+                "SUCCESS",
+
+            "filename":
+                excel_file.filename,
+
+            "data":
+                result,
+        }
+
+    except Exception as error:
+
+        return {
+            "status":
+                "FAILED",
+
+            "error":
+                str(error),
+        }
