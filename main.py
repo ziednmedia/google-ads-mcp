@@ -9407,21 +9407,21 @@ def executive_summary(
     0
 )
 
-if health_score >= 90:
-    executive_grade = "A"
-    campaign_status = "WINNER"
+      if health_score >= 90:
+            executive_grade = "A"
+            campaign_status = "WINNER"
 
-elif health_score >= 75:
-    executive_grade = "B"
-    campaign_status = "GOOD"
+      elif health_score >= 75:
+            executive_grade = "B"
+            campaign_status = "GOOD"
 
-elif health_score >= 60:
-    executive_grade = "C"
-    campaign_status = "NEEDS_ATTENTION"
+       elif health_score >= 60:
+            executive_grade = "C"
+            campaign_status = "NEEDS_ATTENTION"
 
-else:
-    executive_grade = "D"
-    campaign_status = "AT_RISK"
+        else:
+            executive_grade = "D"
+            campaign_status = "AT_RISK"
 
         best = insights.get(
             "best_performers",
@@ -9438,21 +9438,21 @@ else:
 
         recommended_next_action = None
 
-if biggest_opportunity:
+        if biggest_opportunity:
 
-    recommended_next_action = (
-        biggest_opportunity.get(
-            "recommendation"
+            recommended_next_action = (
+                biggest_opportunity.get(
+                    "recommendation"
+                )
         )
-    )
 
-elif biggest_risk:
+        elif biggest_risk:
 
-    recommended_next_action = (
-        biggest_risk.get(
-            "recommended_action"
+            recommended_next_action = (
+                biggest_risk.get(
+                    "recommended_action"
+                )
         )
-    )
 
 
         top_ad = best.get(
