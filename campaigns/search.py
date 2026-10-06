@@ -19,6 +19,9 @@ def search_health():
     return SearchCampaignService.health()
 
 
+# ============================================================
+# FROM EXCEL
+# ============================================================
 @router.post("/from-excel")
 async def create_search_from_excel(
     excel_file: UploadFile = File(...)
@@ -68,3 +71,6 @@ async def create_search_from_excel(
             "error":
                 str(error),
         }
+# ============================================================
+# END FROM EXCEL
+# ============================================================
