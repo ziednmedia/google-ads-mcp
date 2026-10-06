@@ -10202,6 +10202,1069 @@ def action_plan(
             "read_only": True,
             "error": str(error),
         }
+# ============================================================
+# PMAX ASSET ANALYSIS
+# Analyse en lecture seule des groupes d'assets et assets PMax
+#
+# À coller dans main.py APRÈS la configuration Google Ads.
+# Prérequis :
+# - app (FastAPI)
+# - Query et Optional
+# - une fonction existante get_google_ads_client(), OU
+#   une variable globale google_ads_client / client
+# ============================================================
+
+from datetime import datetime
+from typing import Optional
+
+from fastapi import Query
+
+
+# ------------------------------------------------------------
+# HELPERS GÉNÉRAUX
+# ------------------------------------------------------------
+
+
+def _pmax_normalize_customer_id(customer_id: str) -> str:
+    """Normalise et valide un ID client Google Ads."""
+
+    normalized = str(customer_id).replace("-", "").strip()
+
+    if not normalized.isdigit():
+        raise ValueError(
+            "customer_id doit contenir uniquement des chiffres."
+        )
+
+    return normalized
+
+
+def _pmax_normalize_campaign_id(campaign_id: str) -> str:
+    """Normalise et valide un ID de campagne Google Ads."""
+
+    normalized = str(campaign_id).replace("-", "").strip()
+
+    if not normalized.isdigit():
+        raise ValueError(
+            "campaign_id doit contenir uniquement des chiffres."
+        )
+
+    return normalized
+
+
+def _pmax_get_google_ads_client():
+    """
+    Réutilise la connexion Google Ads déjà présente dans main.py.
+
+    Ordre de recherche :
+    1. get_google_ads_client()
+    2. variable globale google_ads_client
+    3. variable globale client
+    """
+
+    factory = globals().get("get_google_ads_client")
+
+    if callable(factory):
+        return factory()
+
+    configured_client = globals().get("google_ads_client")
+
+    if configured_client is not None:
+        return configured_client
+
+    configured_client = globals().get("client")
+
+    if configured_client is not None:
+        return configured_client
+
+    raise RuntimeError(
+        "Client Google Ads introuvable. Adapte "
+        "_pmax_get_google_ads_client() au nom du helper "
+        "d'authentification déjà utilisé dans main.py."
+    )
+
+
+def _pmax_build_date_condition(
+    period: str,
+    start_date: Optional[str],
+    end_date: Optional[str],
+) -> tuple[str, dict]:
+    """Construit la condition GAQL de période et son résumé."""
+
+    if start_date or end_date:
+        if not start_date or not end_date:
+            raise ValueError(
+                "start_date et end_date doivent être fournis ensemble."
+            )
+
+        try:
+            parsed_start = datetime.strptime(
+                start_date,
+                "%Y-%m-%d",
+            )
+            parsed_end = datetime.strptime(
+                end_date,
+                "%Y-%m-%d",
+            )
+        except ValueError as error:
+            raise ValueError(
+                "Les dates doivent respecter le format YYYY-MM-DD."
+            ) from error
+
+        if parsed_start > parsed_end:
+            raise ValueError(
+                "start_date ne peut pas être après end_date."
+            )
+
+        return (
+            (
+                "segments.date BETWEEN "
+                f"'{start_date}' AND '{end_date}'"
+            ),
+            {
+                "mode": "CUSTOM_DATE_RANGE",
+                "period": None,
+                "start_date": start_date,
+                "end_date": end_date,
+            },
+        )
+
+    allowed_periods = {
+        "TODAY",
+        "YESTERDAY",
+        "LAST_7_DAYS",
+        "LAST_14_DAYS",
+        "LAST_30_DAYS",
+        "LAST_90_DAYS",
+        "THIS_MONTH",
+        "LAST_MONTH",
+        "THIS_WEEK_SUN_TODAY",
+        "THIS_WEEK_MON_TODAY",
+        "LAST_WEEK_SUN_SAT",
+        "LAST_WEEK_MON_SUN",
+    }
+
+    normalized_period = str(period).strip().upper()
+
+    if normalized_period not in allowed_periods:
+        raise ValueError(
+            "Période non prise en charge. Utilise une période Google Ads "
+            "valide ou start_date/end_date."
+        )
+
+    return (
+        f"segments.date DURING {normalized_period}",
+        {
+            "mode": "PREDEFINED_PERIOD",
+            "period": normalized_period,
+            "start_date": None,
+            "end_date": None,
+        },
+    )
+
+
+def _pmax_enum_name(value) -> str:
+    """Convertit proprement un enum protobuf en texte."""
+
+    if value is None:
+        return "UNSPECIFIED"
+
+    name = getattr(value, "name", None)
+
+    if name:
+        return str(name)
+
+    text = str(value)
+
+    if "." in text:
+        return text.split(".")[-1]
+
+    return text
+
+
+def _pmax_safe_float(value) -> float:
+    """Conversion numérique sûre."""
+
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _pmax_safe_divide(
+    numerator: float,
+    denominator: float,
+) -> Optional[float]:
+    """Division sûre retournant None si le dénominateur est nul."""
+
+    if denominator == 0:
+        return None
+
+    return numerator / denominator
+
+
+def _pmax_round_or_none(
+    value: Optional[float],
+    digits: int = 2,
+):
+    """Arrondit une valeur tout en conservant None."""
+
+    if value is None:
+        return None
+
+    return round(value, digits)
+
+
+def _pmax_asset_text(asset) -> Optional[str]:
+    """Extrait le contenu texte lorsque l'asset est textuel."""
+
+    text_asset = getattr(asset, "text_asset", None)
+
+    if text_asset is None:
+        return None
+
+    text = getattr(text_asset, "text", None)
+
+    return str(text) if text else None
+
+
+def _pmax_asset_image_url(asset) -> Optional[str]:
+    """Extrait l'URL d'une image lorsqu'elle est exposée par l'API."""
+
+    image_asset = getattr(asset, "image_asset", None)
+
+    if image_asset is None:
+        return None
+
+    full_size = getattr(image_asset, "full_size", None)
+
+    if full_size is None:
+        return None
+
+    url = getattr(full_size, "url", None)
+
+    return str(url) if url else None
+
+
+def _pmax_youtube_video_id(asset) -> Optional[str]:
+    """Extrait l'ID YouTube lorsqu'il est disponible."""
+
+    video_asset = getattr(asset, "youtube_video_asset", None)
+
+    if video_asset is None:
+        return None
+
+    video_id = getattr(video_asset, "youtube_video_id", None)
+
+    return str(video_id) if video_id else None
+
+
+def _pmax_youtube_video_title(asset) -> Optional[str]:
+    """Extrait le titre YouTube lorsqu'il est disponible."""
+
+    video_asset = getattr(asset, "youtube_video_asset", None)
+
+    if video_asset is None:
+        return None
+
+    video_title = getattr(video_asset, "youtube_video_title", None)
+
+    return str(video_title) if video_title else None
+
+
+# ------------------------------------------------------------
+# CLASSIFICATION ET RECOMMANDATIONS
+# ------------------------------------------------------------
+
+
+def _pmax_asset_recommendation(
+    field_type: str,
+    primary_status: str,
+    impressions: int,
+    conversions: float,
+    roas: Optional[float],
+    minimum_impressions: int,
+    minimum_conversions: float,
+) -> dict:
+    """Classe un asset sans modifier la campagne."""
+
+    if primary_status not in {
+        "ELIGIBLE",
+        "LIMITED",
+        "UNSPECIFIED",
+        "UNKNOWN",
+    }:
+        return {
+            "classification": "STATUS_REVIEW",
+            "priority": "HIGH",
+            "recommendation": (
+                "Vérifier le statut de diffusion, les raisons de statut "
+                "et les politiques associées à cet asset."
+            ),
+        }
+
+    if impressions < minimum_impressions:
+        return {
+            "classification": "INSUFFICIENT_DATA",
+            "priority": "INFO",
+            "recommendation": (
+                "Volume insuffisant pour classer cet asset. "
+                "Continuer la collecte de données."
+            ),
+        }
+
+    if conversions >= minimum_conversions and roas is not None:
+        return {
+            "classification": "PERFORMANCE_OBSERVED",
+            "priority": "INFO",
+            "recommendation": (
+                "Performance mesurable. Comparer cet asset aux autres "
+                f"assets du même type {field_type} et du même groupe."
+            ),
+        }
+
+    return {
+        "classification": "MONITOR",
+        "priority": "LOW",
+        "recommendation": (
+            "Surveiller cet asset. Le volume existe, mais les conversions "
+            "restent insuffisantes pour le déclarer gagnant."
+        ),
+    }
+
+
+def _pmax_ad_strength_recommendation(ad_strength: str) -> dict:
+    """Produit une recommandation de groupe selon sa force publicitaire."""
+
+    if ad_strength == "EXCELLENT":
+        return {
+            "priority": "INFO",
+            "recommendation": (
+                "La force du groupe d'assets est excellente. "
+                "Continuer la surveillance."
+            ),
+        }
+
+    if ad_strength == "GOOD":
+        return {
+            "priority": "LOW",
+            "recommendation": (
+                "La force est bonne. Vérifier la diversité et la couverture "
+                "des assets avant d'ajouter du matériel."
+            ),
+        }
+
+    if ad_strength in {"AVERAGE", "POOR"}:
+        return {
+            "priority": "MEDIUM",
+            "recommendation": (
+                "Améliorer la diversité et la couverture des titres, "
+                "des descriptions, des images, des logos et des vidéos."
+            ),
+        }
+
+    return {
+        "priority": "INFO",
+        "recommendation": (
+            "La force du groupe n'est pas suffisamment renseignée. "
+            "Vérifier la configuration du groupe d'assets."
+        ),
+    }
+
+
+# ------------------------------------------------------------
+# ENDPOINT
+# ------------------------------------------------------------
+
+
+@app.get("/pmax-asset-analysis")
+def pmax_asset_analysis(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne Performance Max",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description="Période Google Ads prédéfinie.",
+    ),
+    start_date: Optional[str] = Query(
+        default=None,
+        description="Date de début YYYY-MM-DD.",
+    ),
+    end_date: Optional[str] = Query(
+        default=None,
+        description="Date de fin YYYY-MM-DD.",
+    ),
+    minimum_impressions_for_evaluation: int = Query(
+        default=100,
+        ge=1,
+        le=10000000,
+        description=(
+            "Impressions minimales avant d'évaluer un asset."
+        ),
+    ),
+    minimum_conversions_for_winner: float = Query(
+        default=3.0,
+        ge=0,
+        le=1000000,
+        description=(
+            "Conversions minimales avant de considérer un asset comme "
+            "suffisamment documenté."
+        ),
+    ),
+):
+    try:
+        normalized_customer_id = _pmax_normalize_customer_id(
+            customer_id
+        )
+        normalized_campaign_id = _pmax_normalize_campaign_id(
+            campaign_id
+        )
+        date_condition, date_range = _pmax_build_date_condition(
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        google_ads_client = _pmax_get_google_ads_client()
+        google_ads_service = google_ads_client.get_service(
+            "GoogleAdsService"
+        )
+
+        # ----------------------------------------------------
+        # 1. VALIDATION DE LA CAMPAGNE
+        # ----------------------------------------------------
+
+        campaign_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.advertising_channel_type
+            FROM campaign
+            WHERE campaign.id = {normalized_campaign_id}
+            LIMIT 1
+        """
+
+        campaign_rows = list(
+            google_ads_service.search(
+                customer_id=normalized_customer_id,
+                query=campaign_query,
+            )
+        )
+
+        if not campaign_rows:
+            return {
+                "status": "NO_DATA",
+                "mode": "PMAX_ASSET_ANALYSIS",
+                "automatic_action": False,
+                "read_only": True,
+                "customer_id": normalized_customer_id,
+                "campaign_id": normalized_campaign_id,
+                "message": "Campagne introuvable.",
+            }
+
+        campaign_row = campaign_rows[0]
+        campaign = campaign_row.campaign
+        channel_type = _pmax_enum_name(
+            campaign.advertising_channel_type
+        )
+
+        if channel_type != "PERFORMANCE_MAX":
+            return {
+                "status": "NOT_APPLICABLE",
+                "mode": "PMAX_ASSET_ANALYSIS",
+                "automatic_action": False,
+                "read_only": True,
+                "customer_id": normalized_customer_id,
+                "campaign_id": normalized_campaign_id,
+                "campaign_name": campaign.name,
+                "channel_type": channel_type,
+                "message": (
+                    "Cet endpoint s'applique uniquement aux campagnes "
+                    "Performance Max."
+                ),
+            }
+
+        # ----------------------------------------------------
+        # 2. GROUPES D'ASSETS ET PERFORMANCE DU GROUPE
+        # ----------------------------------------------------
+
+        asset_group_query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                asset_group.id,
+                asset_group.name,
+                asset_group.status,
+                asset_group.primary_status,
+                asset_group.ad_strength,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM asset_group
+            WHERE campaign.id = {normalized_campaign_id}
+              AND asset_group.status != 'REMOVED'
+              AND {date_condition}
+            ORDER BY metrics.conversions_value DESC
+        """
+
+        asset_groups = []
+        asset_group_lookup = {}
+
+        for row in google_ads_service.search(
+            customer_id=normalized_customer_id,
+            query=asset_group_query,
+        ):
+            group = row.asset_group
+            metrics = row.metrics
+
+            impressions = int(metrics.impressions or 0)
+            clicks = int(metrics.clicks or 0)
+            cost = _pmax_safe_float(metrics.cost_micros) / 1000000
+            conversions = _pmax_safe_float(metrics.conversions)
+            conversion_value = _pmax_safe_float(
+                metrics.conversions_value
+            )
+            ctr = _pmax_safe_divide(clicks * 100, impressions)
+            cpa = _pmax_safe_divide(cost, conversions)
+            roas = _pmax_safe_divide(conversion_value, cost)
+            ad_strength = _pmax_enum_name(group.ad_strength)
+            strength_insight = _pmax_ad_strength_recommendation(
+                ad_strength
+            )
+
+            group_data = {
+                "asset_group_id": str(group.id),
+                "asset_group_name": group.name,
+                "status": _pmax_enum_name(group.status),
+                "primary_status": _pmax_enum_name(
+                    group.primary_status
+                ),
+                "ad_strength": ad_strength,
+                "priority": strength_insight["priority"],
+                "recommendation": strength_insight[
+                    "recommendation"
+                ],
+                "impressions": impressions,
+                "clicks": clicks,
+                "ctr_percent": _pmax_round_or_none(ctr),
+                "cost": round(cost, 2),
+                "conversions": round(conversions, 2),
+                "conversion_value": round(conversion_value, 2),
+                "cpa": _pmax_round_or_none(cpa),
+                "roas": _pmax_round_or_none(roas),
+                "assets_count": 0,
+            }
+
+            asset_groups.append(group_data)
+            asset_group_lookup[str(group.id)] = group_data
+
+        # ----------------------------------------------------
+        # 3. ASSETS PMax AVEC MÉTRIQUES
+        # Disponible sur les versions récentes de Google Ads API.
+        # ----------------------------------------------------
+
+        asset_query_with_metrics = f"""
+            SELECT
+                campaign.id,
+                asset_group.id,
+                asset_group.name,
+                asset_group_asset.asset,
+                asset_group_asset.field_type,
+                asset_group_asset.status,
+                asset_group_asset.primary_status,
+                asset.id,
+                asset.name,
+                asset.type,
+                asset.text_asset.text,
+                asset.image_asset.full_size.url,
+                asset.youtube_video_asset.youtube_video_id,
+                asset.youtube_video_asset.youtube_video_title,
+                metrics.impressions,
+                metrics.clicks,
+                metrics.cost_micros,
+                metrics.conversions,
+                metrics.conversions_value
+            FROM asset_group_asset
+            WHERE campaign.id = {normalized_campaign_id}
+              AND asset_group_asset.status != 'REMOVED'
+              AND {date_condition}
+            ORDER BY metrics.conversions_value DESC
+        """
+
+        metrics_mode = "ASSET_LEVEL_METRICS"
+        metrics_warning = None
+        assets = []
+
+        try:
+            asset_rows = google_ads_service.search(
+                customer_id=normalized_customer_id,
+                query=asset_query_with_metrics,
+            )
+
+            for row in asset_rows:
+                group = row.asset_group
+                link = row.asset_group_asset
+                asset = row.asset
+                metrics = row.metrics
+
+                impressions = int(metrics.impressions or 0)
+                clicks = int(metrics.clicks or 0)
+                cost = (
+                    _pmax_safe_float(metrics.cost_micros)
+                    / 1000000
+                )
+                conversions = _pmax_safe_float(
+                    metrics.conversions
+                )
+                conversion_value = _pmax_safe_float(
+                    metrics.conversions_value
+                )
+                ctr = _pmax_safe_divide(
+                    clicks * 100,
+                    impressions,
+                )
+                cpa = _pmax_safe_divide(cost, conversions)
+                roas = _pmax_safe_divide(
+                    conversion_value,
+                    cost,
+                )
+                field_type = _pmax_enum_name(link.field_type)
+                primary_status = _pmax_enum_name(
+                    link.primary_status
+                )
+                insight = _pmax_asset_recommendation(
+                    field_type=field_type,
+                    primary_status=primary_status,
+                    impressions=impressions,
+                    conversions=conversions,
+                    roas=roas,
+                    minimum_impressions=(
+                        minimum_impressions_for_evaluation
+                    ),
+                    minimum_conversions=(
+                        minimum_conversions_for_winner
+                    ),
+                )
+
+                asset_data = {
+                    "asset_group_id": str(group.id),
+                    "asset_group_name": group.name,
+                    "asset_id": str(asset.id),
+                    "asset_resource_name": link.asset,
+                    "asset_name": asset.name or None,
+                    "asset_type": _pmax_enum_name(asset.type),
+                    "field_type": field_type,
+                    "status": _pmax_enum_name(link.status),
+                    "primary_status": primary_status,
+                    "text": _pmax_asset_text(asset),
+                    "image_url": _pmax_asset_image_url(asset),
+                    "youtube_video_id": (
+                        _pmax_youtube_video_id(asset)
+                    ),
+                    "youtube_video_title": (
+                        _pmax_youtube_video_title(asset)
+                    ),
+                    "classification": insight[
+                        "classification"
+                    ],
+                    "priority": insight["priority"],
+                    "recommendation": insight[
+                        "recommendation"
+                    ],
+                    "impressions": impressions,
+                    "clicks": clicks,
+                    "ctr_percent": _pmax_round_or_none(ctr),
+                    "cost": round(cost, 2),
+                    "conversions": round(conversions, 2),
+                    "conversion_value": round(
+                        conversion_value,
+                        2,
+                    ),
+                    "cpa": _pmax_round_or_none(cpa),
+                    "roas": _pmax_round_or_none(roas),
+                }
+
+                assets.append(asset_data)
+
+                group_data = asset_group_lookup.get(
+                    str(group.id)
+                )
+
+                if group_data is not None:
+                    group_data["assets_count"] += 1
+
+        except Exception as metrics_error:
+            # Fallback pour les environnements où les métriques détaillées
+            # au niveau asset ne sont pas compatibles avec la version API.
+            metrics_mode = "ASSET_METADATA_ONLY"
+            metrics_warning = str(metrics_error)
+
+            asset_query_metadata = f"""
+                SELECT
+                    campaign.id,
+                    asset_group.id,
+                    asset_group.name,
+                    asset_group_asset.asset,
+                    asset_group_asset.field_type,
+                    asset_group_asset.status,
+                    asset_group_asset.primary_status,
+                    asset.id,
+                    asset.name,
+                    asset.type,
+                    asset.text_asset.text,
+                    asset.image_asset.full_size.url,
+                    asset.youtube_video_asset.youtube_video_id,
+                    asset.youtube_video_asset.youtube_video_title
+                FROM asset_group_asset
+                WHERE campaign.id = {normalized_campaign_id}
+                  AND asset_group_asset.status != 'REMOVED'
+            """
+
+            for row in google_ads_service.search(
+                customer_id=normalized_customer_id,
+                query=asset_query_metadata,
+            ):
+                group = row.asset_group
+                link = row.asset_group_asset
+                asset = row.asset
+                primary_status = _pmax_enum_name(
+                    link.primary_status
+                )
+
+                assets.append(
+                    {
+                        "asset_group_id": str(group.id),
+                        "asset_group_name": group.name,
+                        "asset_id": str(asset.id),
+                        "asset_resource_name": link.asset,
+                        "asset_name": asset.name or None,
+                        "asset_type": _pmax_enum_name(asset.type),
+                        "field_type": _pmax_enum_name(
+                            link.field_type
+                        ),
+                        "status": _pmax_enum_name(link.status),
+                        "primary_status": primary_status,
+                        "text": _pmax_asset_text(asset),
+                        "image_url": _pmax_asset_image_url(asset),
+                        "youtube_video_id": (
+                            _pmax_youtube_video_id(asset)
+                        ),
+                        "youtube_video_title": (
+                            _pmax_youtube_video_title(asset)
+                        ),
+                        "classification": "METADATA_ONLY",
+                        "priority": (
+                            "HIGH"
+                            if primary_status not in {
+                                "ELIGIBLE",
+                                "LIMITED",
+                                "UNSPECIFIED",
+                                "UNKNOWN",
+                            }
+                            else "INFO"
+                        ),
+                        "recommendation": (
+                            "Métriques détaillées non disponibles dans "
+                            "la version API actuelle. Vérifier le statut "
+                            "et analyser la performance du groupe d'assets."
+                        ),
+                        "impressions": None,
+                        "clicks": None,
+                        "ctr_percent": None,
+                        "cost": None,
+                        "conversions": None,
+                        "conversion_value": None,
+                        "cpa": None,
+                        "roas": None,
+                    }
+                )
+
+                group_data = asset_group_lookup.get(
+                    str(group.id)
+                )
+
+                if group_data is not None:
+                    group_data["assets_count"] += 1
+
+        # ----------------------------------------------------
+        # 4. AGRÉGATIONS PAR TYPE
+        # ----------------------------------------------------
+
+        assets_by_field_type = {}
+
+        for asset in assets:
+            field_type = asset["field_type"]
+
+            if field_type not in assets_by_field_type:
+                assets_by_field_type[field_type] = {
+                    "field_type": field_type,
+                    "assets_count": 0,
+                    "eligible_count": 0,
+                    "status_review_count": 0,
+                    "assets_with_sufficient_data": 0,
+                    "best_asset": None,
+                }
+
+            bucket = assets_by_field_type[field_type]
+            bucket["assets_count"] += 1
+
+            if asset["primary_status"] == "ELIGIBLE":
+                bucket["eligible_count"] += 1
+
+            if asset["classification"] == "STATUS_REVIEW":
+                bucket["status_review_count"] += 1
+
+            if (
+                asset["impressions"] is not None
+                and asset["impressions"]
+                >= minimum_impressions_for_evaluation
+                and asset["conversions"] is not None
+                and asset["conversions"]
+                >= minimum_conversions_for_winner
+            ):
+                bucket["assets_with_sufficient_data"] += 1
+
+                current_best = bucket["best_asset"]
+                current_roas = asset["roas"]
+
+                if (
+                    current_roas is not None
+                    and (
+                        current_best is None
+                        or current_best.get("roas") is None
+                        or current_roas > current_best["roas"]
+                    )
+                ):
+                    bucket["best_asset"] = asset
+
+        asset_type_summary = list(
+            assets_by_field_type.values()
+        )
+        asset_type_summary.sort(
+            key=lambda item: item["field_type"]
+        )
+
+        # ----------------------------------------------------
+        # 5. RISQUES ET OPPORTUNITÉS
+        # ----------------------------------------------------
+
+        risks = []
+        opportunities = []
+
+        for group in asset_groups:
+            if group["priority"] == "MEDIUM":
+                risks.append(
+                    {
+                        "source": "ASSET_GROUP",
+                        "priority": "MEDIUM",
+                        "asset_group_id": group[
+                            "asset_group_id"
+                        ],
+                        "asset_group_name": group[
+                            "asset_group_name"
+                        ],
+                        "risk": (
+                            "Force du groupe d'assets : "
+                            f"{group['ad_strength']}."
+                        ),
+                        "recommended_action": group[
+                            "recommendation"
+                        ],
+                    }
+                )
+
+        for asset in assets:
+            if asset["classification"] == "STATUS_REVIEW":
+                risks.append(
+                    {
+                        "source": "ASSET",
+                        "priority": "HIGH",
+                        "asset_id": asset["asset_id"],
+                        "asset_group_id": asset[
+                            "asset_group_id"
+                        ],
+                        "field_type": asset["field_type"],
+                        "risk": (
+                            "Asset nécessitant une vérification de statut : "
+                            f"{asset['primary_status']}."
+                        ),
+                        "recommended_action": asset[
+                            "recommendation"
+                        ],
+                    }
+                )
+
+        for bucket in asset_type_summary:
+            best_asset = bucket.get("best_asset")
+
+            if best_asset is not None:
+                opportunities.append(
+                    {
+                        "source": "ASSET",
+                        "priority": "INFO",
+                        "field_type": bucket["field_type"],
+                        "asset_id": best_asset["asset_id"],
+                        "asset_group_id": best_asset[
+                            "asset_group_id"
+                        ],
+                        "opportunity": (
+                            best_asset.get("text")
+                            or best_asset.get("asset_name")
+                            or best_asset.get("youtube_video_title")
+                            or f"Asset {best_asset['asset_id']}"
+                        ),
+                        "roas": best_asset["roas"],
+                        "cpa": best_asset["cpa"],
+                        "conversions": best_asset["conversions"],
+                        "recommendation": (
+                            "Utiliser cet asset comme référence créative, "
+                            "sans le déclarer gagnant hors du contexte de "
+                            "son groupe et de son canal."
+                        ),
+                    }
+                )
+
+        priority_order = {
+            "HIGH": 1,
+            "MEDIUM": 2,
+            "LOW": 3,
+            "INFO": 4,
+        }
+
+        risks.sort(
+            key=lambda item: priority_order.get(
+                item["priority"],
+                99,
+            )
+        )
+
+        # ----------------------------------------------------
+        # 6. RÉSUMÉ EXÉCUTIF
+        # ----------------------------------------------------
+
+        strongest_group = None
+
+        groups_with_roas = [
+            group
+            for group in asset_groups
+            if group["roas"] is not None
+        ]
+
+        if groups_with_roas:
+            strongest_group = max(
+                groups_with_roas,
+                key=lambda item: item["roas"],
+            )
+
+        return {
+            "status": "SUCCESS",
+            "mode": "PMAX_ASSET_ANALYSIS",
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+            "read_only": True,
+            "customer_id": normalized_customer_id,
+            "campaign_id": normalized_campaign_id,
+            "campaign_name": campaign.name,
+            "campaign_status": _pmax_enum_name(campaign.status),
+            "channel_type": channel_type,
+            "date_range": date_range,
+            "metrics_mode": metrics_mode,
+            "metrics_warning": metrics_warning,
+            "thresholds": {
+                "minimum_impressions_for_evaluation": (
+                    minimum_impressions_for_evaluation
+                ),
+                "minimum_conversions_for_winner": (
+                    minimum_conversions_for_winner
+                ),
+            },
+            "summary": {
+                "asset_groups_count": len(asset_groups),
+                "assets_count": len(assets),
+                "asset_field_types_count": len(
+                    asset_type_summary
+                ),
+                "risks_count": len(risks),
+                "opportunities_count": len(opportunities),
+                "strongest_asset_group": strongest_group,
+            },
+            "executive_summary": {
+                "overall_assessment": (
+                    "Analyse PMax complétée avec métriques détaillées "
+                    "par asset."
+                    if metrics_mode == "ASSET_LEVEL_METRICS"
+                    else (
+                        "Analyse PMax complétée au niveau des groupes "
+                        "et des métadonnées d'assets."
+                    )
+                ),
+                "biggest_risk": risks[0] if risks else None,
+                "main_opportunity": (
+                    opportunities[0]
+                    if opportunities
+                    else None
+                ),
+                "recommended_first_action": (
+                    risks[0]["recommended_action"]
+                    if risks
+                    else (
+                        "Continuer la surveillance et comparer les assets "
+                        "ayant un volume de données suffisant."
+                    )
+                ),
+            },
+            "asset_groups": asset_groups,
+            "asset_type_summary": asset_type_summary,
+            "assets": assets,
+            "risks": risks,
+            "opportunities": opportunities,
+            "disclaimer": (
+                "Cette analyse est en lecture seule. Performance Max "
+                "assemble dynamiquement les assets selon le canal. "
+                "Un ROAS observé au niveau d'un asset doit être interprété "
+                "avec son groupe, son canal, son volume et les objectifs "
+                "de conversion avant toute décision."
+            ),
+        }
+
+    except ValueError as error:
+        return {
+            "status": "FAILED",
+            "mode": "PMAX_ASSET_ANALYSIS",
+            "automatic_action": False,
+            "read_only": True,
+            "error": str(error),
+        }
+
+    except Exception as error:
+        error_text = str(error)
+
+        if "invalid_grant" in error_text:
+            return {
+                "status": "AUTHENTICATION_ERROR",
+                "mode": "PMAX_ASSET_ANALYSIS",
+                "automatic_action": False,
+                "read_only": True,
+                "requires_reauthentication": True,
+                "error": (
+                    "Google Ads refresh token expiré ou révoqué."
+                ),
+            }
+
+        return {
+            "status": "FAILED",
+            "mode": "PMAX_ASSET_ANALYSIS",
+            "automatic_action": False,
+            "read_only": True,
+            "error": error_text,
+        }
 
 # ============================================================
 # OPTIMIZATION OPPORTUNITIES
