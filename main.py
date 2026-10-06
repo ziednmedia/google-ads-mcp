@@ -9370,16 +9370,22 @@ def executive_summary(
 ):
     try:
 
-        insights = account_insights(
-            customer_id=customer_id,
-            campaign_id=campaign_id,
-            period=period,
-            start_date=start_date,
-            end_date=end_date,
+        insights_result = (
+            _account_insights_safe_call(
+                "account_insights",
+                account_insights,
+                customer_id=customer_id,
+                campaign_id=campaign_id,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
         )
 
-        if insights.get("status") != "SUCCESS":
-            return insights
+
+        if insights_result["status"] != "SUCCESS":
+                return insights_result
+        insights = insights_result["data"]
 
         health = insights.get(
             "health",
