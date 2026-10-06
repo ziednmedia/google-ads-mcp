@@ -79,10 +79,86 @@ class SearchCampaignService:
                 account_sheet["C17"].value,
         }
 
+                ad_groups_sheet = workbook[
+            "Ad Groups"
+        ]
+
+        ad_groups = []
+
+        for row in range(
+            4,
+            ad_groups_sheet.max_row + 1,
+        ):
+
+            campaign_name = (
+                ad_groups_sheet[
+                    f"A{row}"
+                ].value
+            )
+
+            if not campaign_name:
+                continue
+
+            ad_groups.append(
+                {
+                    "campaign_name":
+                        campaign_name,
+
+                    "name":
+                        ad_groups_sheet[
+                            f"B{row}"
+                        ].value,
+
+                    "final_url":
+                        ad_groups_sheet[
+                            f"C{row}"
+                        ].value,
+
+                    "path1":
+                        ad_groups_sheet[
+                            f"D{row}"
+                        ].value,
+
+                    "path2":
+                        ad_groups_sheet[
+                            f"F{row}"
+                        ].value,
+
+                    "utm_source":
+                        ad_groups_sheet[
+                            f"H{row}"
+                        ].value,
+
+                    "utm_medium":
+                        ad_groups_sheet[
+                            f"I{row}"
+                        ].value,
+
+                    "utm_campaign":
+                        ad_groups_sheet[
+                            f"J{row}"
+                        ].value,
+
+                    "utm_term":
+                        ad_groups_sheet[
+                            f"K{row}"
+                        ].value,
+
+                    "utm_content":
+                        ad_groups_sheet[
+                            f"L{row}"
+                        ].value,
+                }
+            )
+
         return {
             "worksheets":
                 workbook.sheetnames,
 
             "campaign":
                 campaign,
+
+            "ad_groups":
+                ad_groups,
         }
+
