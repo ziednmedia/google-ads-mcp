@@ -241,7 +241,7 @@ class SearchCampaignService:
     def _read_ad_groups(
         workbook,
         campaign_name: Optional[str],
-    ) -> list[dict\]:
+    ) -> list[dict]:
 
         ad_groups_sheet = workbook[
             "Ad Groups"
@@ -391,7 +391,7 @@ class SearchCampaignService:
     def _read_ads(
         workbook,
         campaign_name: Optional[str],
-    ) -> list[dict\]:
+    ) -> list[dict]:
 
         ads_sheet = workbook[
             "Ads"
