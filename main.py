@@ -9342,7 +9342,229 @@ def account_insights(
             "error": str(error),
         }
 
+# ============================================================
+# EXECUTIVE SUMMARY
+# Résumé de direction basé sur account-insights
+# Lecture seule
+# ============================================================
 
+@app.get("/executive-summary")
+def executive_summary(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads"
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne"
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS"
+    ),
+    start_date: Optional[str] = Query(
+        default=None
+    ),
+    end_date: Optional[str] = Query(
+        default=None
+    ),
+):
+    try:
+
+        insights = account_insights(
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if insights.get("status") != "SUCCESS":
+            return insights
+
+        health = insights.get(
+            "health",
+            {}
+        )
+
+        campaign = insights.get(
+            "campaign_summary",
+            {}
+        )
+
+        summary = insights.get(
+            "executive_summary",
+            {}
+        )
+
+        best = insights.get(
+            "best_performers",
+            {}
+        )
+
+        biggest_risk = summary.get(
+            "biggest_risk"
+        )
+
+        biggest_opportunity = summary.get(
+            "biggest_opportunity"
+        )
+
+        top_ad = best.get(
+            "ad_by_roas"
+        )
+
+        top_keyword = best.get(
+            "keyword_by_roas"
+        )
+
+        lines = []
+
+        lines.append(
+            f"La campagne "
+            f"'{insights.get('campaign_name')}' "
+            f"présente un score de santé "
+            f"{health.get('score')}/100 "
+            f"({health.get('label')})."
+        )
+
+        lines.append(
+            f"CPA moyen : "
+            f"{campaign.get('cpa')} $."
+        )
+
+        lines.append(
+            f"ROAS : "
+            f"{campaign.get('roas')}."
+        )
+
+        lines.append(
+            f"Conversions : "
+            f"{round(campaign.get('conversions', 0), 2)}."
+        )
+
+        if biggest_risk:
+            lines.append(
+                f"Risque principal : "
+                f"{biggest_risk.get('risk')}"
+            )
+
+        if biggest_opportunity:
+            lines.append(
+                f"Opportunité principale : "
+                f"{biggest_opportunity.get('opportunity')}"
+            )
+
+        if top_keyword:
+            lines.append(
+                f"Meilleur mot-clé : "
+                f"{top_keyword.get('keyword')} "
+                f"(ROAS {top_keyword.get('roas')})."
+            )
+
+        if top_ad:
+            lines.append(
+                f"Meilleure annonce : "
+                f"ROAS {top_ad.get('roas')} "
+                f"avec CPA de {top_ad.get('cpa')} $."
+            )
+
+        executive_text = " ".join(lines)
+
+        return {
+            "status": "SUCCESS",
+            "mode": "EXECUTIVE_SUMMARY",
+            "automatic_action": False,
+            "requires_human_confirmation": True,
+
+            "customer_id": customer_id,
+            "campaign_id": campaign_id,
+            "campaign_name": insights.get(
+                "campaign_name"
+            ),
+
+            "health_score": health.get(
+                "score"
+            ),
+
+            "health_label": health.get(
+                "label"
+            ),
+
+            "confidence": health.get(
+                "confidence"
+            ),
+
+            "roas": campaign.get(
+                "roas"
+            ),
+
+            "cpa": campaign.get(
+                "cpa"
+            ),
+
+            "conversions": campaign.get(
+                "conversions"
+            ),
+
+            "biggest_risk": biggest_risk,
+
+            "biggest_opportunity": (
+                biggest_opportunity
+            ),
+
+            "executive_text": (
+                executive_text
+            ),
+
+            "executive_bullets": [
+                {
+                    "type": "CAMPAIGN_HEALTH",
+                    "value": (
+                        health.get("label")
+                    )
+                },
+                {
+                    "type": "ROAS",
+                    "value": (
+                        campaign.get("roas")
+                    )
+                },
+                {
+                    "type": "CPA",
+                    "value": (
+                        campaign.get("cpa")
+                    )
+                },
+                {
+                    "type": "RISK",
+                    "value": (
+                        biggest_risk.get(
+                            "risk"
+                        )
+                        if biggest_risk
+                        else None
+                    )
+                },
+                {
+                    "type": "OPPORTUNITY",
+                    "value": (
+                        biggest_opportunity.get(
+                            "opportunity"
+                        )
+                        if biggest_opportunity
+                        else None
+                    )
+                }
+            ]
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "automatic_action": False,
+            "error": str(error)
+        }
 
 # ============================================================
 # OPTIMIZATION OPPORTUNITIES
