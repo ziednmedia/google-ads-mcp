@@ -1379,7 +1379,7 @@ def _create_ad_groups(
     )
 
     return {
-        item["name"\]:
+        item["name"]:
             result.resource_name
         for item, result in zip(
             ad_groups,
