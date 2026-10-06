@@ -1,14 +1,16 @@
 from fastapi import APIRouter
 
+from services.search_campaign_service import (
+    SearchCampaignService,
+)
+
 router = APIRouter(
     prefix="/campaigns/search",
-    tags=["Search Campaigns"]
+    tags=["Search Campaigns"],
 )
 
 
 @router.get("/health")
 def search_health():
-    return {
-        "status": "SUCCESS",
-        "module": "SEARCH"
-    }
+
+    return SearchCampaignService.health()
