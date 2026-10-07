@@ -2041,50 +2041,6 @@ async def create_search_campaign(
             )
         )
 
-        return {
-            "status": "DEBUG",
-
-            "GOOGLE_ADS_DEVELOPER_TOKEN":
-                bool(
-                    os.getenv(
-                        "GOOGLE_ADS_DEVELOPER_TOKEN"
-                    )
-                ),
-
-            "GOOGLE_ADS_CLIENT_ID":
-                bool(
-                    os.getenv(
-                        "GOOGLE_ADS_CLIENT_ID"
-                    )
-                ),
-
-            "GOOGLE_ADS_CLIENT_SECRET":
-                bool(
-                    os.getenv(
-                        "GOOGLE_ADS_CLIENT_SECRET"
-                    )
-                ),
-
-            "GOOGLE_ADS_REFRESH_TOKEN":
-                bool(
-                    os.getenv(
-                        "GOOGLE_ADS_REFRESH_TOKEN"
-                    )
-                ),
-
-            "GOOGLE_ADS_LOGIN_CUSTOMER_ID":
-                bool(
-                    os.getenv(
-                        "GOOGLE_ADS_LOGIN_CUSTOMER_ID"
-                    )
-                ),
-
-            "USE_PROTO_PLUS":
-                os.getenv(
-                    "USE_PROTO_PLUS"
-                ),
-        }
-
         client = (
             GoogleAdsClient
             .load_from_env()
