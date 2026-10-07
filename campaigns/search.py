@@ -1270,6 +1270,14 @@ def _create_campaign(
             "MAXIMIZE_CONVERSIONS et MAXIMIZE_CLICKS."
         )
 
+    campaign.geo_target_type_setting.positive_geo_target_type = (
+        client.enums.PositiveGeoTargetTypeEnum.PRESENCE
+    )
+ 
+    campaign.geo_target_type_setting.negative_geo_target_type = (
+        client.enums.NegativeGeoTargetTypeEnum.PRESENCE
+    )
+
     start_date = _normalize_date(
         campaign_data.get(
             "start_date"
@@ -1297,6 +1305,9 @@ def _create_campaign(
                 #"",
             #)
         #)
+    return {
+        "campaign_fields": dir(campaign)
+    }
 
     response = (
         campaign_service
