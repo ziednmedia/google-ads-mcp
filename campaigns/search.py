@@ -1973,23 +1973,11 @@ async def create_search_campaign(
             "false"
         ).lower() == "true"
 
-        if (
-            not allow_creation
-            and validate_only is False
-        ):
+        if not allow_creation:
             return {
-                "status":
-                    "CREATION_DISABLED",
-
-                "automatic_action":
-                    False,
-
-                "error":
-                    (
-                        "La création réelle de campagnes "
-                        "est désactivée."
-                    )
-            tr}
+                "status":"CREATION_DISABLED",
+                "error":"La création réelle de campagnes est désactivée. "
+            }
 
         if validate_only:
             return {
