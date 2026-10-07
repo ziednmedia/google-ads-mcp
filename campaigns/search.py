@@ -441,6 +441,45 @@ async def preview_search_campaign(
                     campaign.get(
                         "campaign_name"
                     ),
+            "confirmation_required":
+                True,
+            "creation_plan": [
+                {
+                    "step": 1,
+                    "action":
+                    "Create Campaign Budget"
+                },
+                {
+                    "step": 2,
+                    "action":
+                    "Create Campaign"
+                },
+                {
+                    "step": 3,
+                    "action":
+                    "Create Campaign Criteria"
+                },
+                {
+                    "step": 4,
+                    "action":
+                    "Create Ad Groups"
+                },
+                {
+                    "step": 5,
+                    "action":
+                    "Create Keywords"
+                },
+                {
+                    "step": 6,
+                    "action":
+                    "Create Responsive Search Ads"
+                },
+                {
+                    "step": 7,
+                    "action":
+                    "Create Sitelinks"
+                }
+            ],
 
                 "customer_id":
                     campaign.get(
@@ -1928,6 +1967,29 @@ async def create_search_campaign(
             "sitelinks",
             [],
         ) or []
+
+        allow_creation = os.getenv(
+            "ALLOW_CAMPAIGN_CREATION",
+            "false"
+        ).lower() == "true"
+
+        if (
+            not allow_creation
+            and validate_only is False
+        ):
+            return {
+                "status":
+                    "CREATION_DISABLED",
+
+                "automatic_action":
+                    False,
+
+                "error":
+                    (
+                        "La création réelle de campagnes "
+                        "est désactivée."
+                    )
+            tr}
 
         if validate_only:
             return {
