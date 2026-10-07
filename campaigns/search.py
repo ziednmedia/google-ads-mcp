@@ -1305,9 +1305,10 @@ def _create_campaign(
                 #"",
             #)
         #)
-    return {
-        "campaign_fields": dir(campaign)
-    }
+#----------------------------------------------------------------------------------------------------------------------------------------------------------
+return {
+    "campaign_fields": dir(campaign)
+}
 
     response = (
         campaign_service
