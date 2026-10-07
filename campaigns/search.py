@@ -1276,21 +1276,21 @@ def _create_campaign(
         )
     )
 
-    if start_date:
-        campaign.start_date = (
-            start_date.replace(
-                "-",
-                "",
-            )
-        )
+    #if start_date:
+        #campaign.start_date = (
+            #start_date.replace(
+                #"-",
+                #"",
+            #)
+        #)
 
-    if end_date:
-        campaign.end_date = (
-            end_date.replace(
-                "-",
-                "",
-            )
-        )
+    #if end_date:
+        #campaign.end_date = (
+            #end_date.replace(
+                #"-",
+                #"",
+            #)
+        #)
 
     response = (
         campaign_service
