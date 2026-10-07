@@ -1236,12 +1236,13 @@ def _create_campaign(
         )
         or ""
     ).upper()
-
+       
     if (
         bidding_strategy
         == "MAXIMIZE_CONVERSIONS"
     ):
-        campaign.maximize_conversions.CopyFrom(
+        pass
+        campaign.maximize_conversions = (
             client.get_type(
                 "MaximizeConversions"
             )
@@ -1251,7 +1252,7 @@ def _create_campaign(
         bidding_strategy
         == "MAXIMIZE_CLICKS"
     ):
-        campaign.maximize_clicks.CopyFrom(
+        campaign.maximize_clicks = (
             client.get_type(
                 "MaximizeClicks"
             )
