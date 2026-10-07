@@ -1196,7 +1196,14 @@ def _create_campaign(
     campaign.name = campaign_data[
         "campaign_name"
     ]
-
+    campaign.geo_target_type_setting.positive_geo_target_type = (
+        client.enums
+        .PositiveGeoTargetTypeEnum.PRESENCE
+    )
+    campaign.geo_target_type_setting.negative_geo_target_type = (
+        client.enums
+        .NegativeGeoTargetTypeEnum.PRESENCE
+    )
     campaign.contains_eu_political_advertising = (
         client.enums
         .EuPoliticalAdvertisingStatusEnum
@@ -1236,13 +1243,7 @@ def _create_campaign(
     campaign.network_settings.target_content_network = False
     campaign.network_settings.target_partner_search_network = False
 
-    campaign.geo_target_type_setting.positive_geo_target_type = (
-        client.enums.PositiveGeoTargetTypeEnum.PRESENCE
-    )
- 
-    campaign.geo_target_type_setting.negative_geo_target_type = (
-        client.enums.NegativeGeoTargetTypeEnum.PRESENCE
-    )
+    
 
     bidding_strategy = str(
         campaign_data.get(
