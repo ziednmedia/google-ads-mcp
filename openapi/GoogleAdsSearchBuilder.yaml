@@ -1,0 +1,97 @@
+openapi: 3.0.1
+
+info:
+  title: Google Ads Search Builder
+  version: 1.0.0
+  description: Création de campagnes Search Google Ads.
+
+servers:
+  - url: https://google-ads-mcp-165964728033.europe-west1.run.app
+
+paths:
+
+  /campaigns/search/health:
+    get:
+      operationId: SearchHealth
+      summary: Search Health
+      responses:
+        '200':
+          description: OK
+
+  /campaigns/search/from-excel:
+    post:
+      operationId: SearchFromExcel
+      summary: Lire un fichier Excel Search
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                excel_file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+
+  /campaigns/search/validate:
+    post:
+      operationId: SearchValidate
+      summary: Validation Campaign Search
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                excel_file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+
+  /campaigns/search/preview:
+    post:
+      operationId: SearchPreview
+      summary: Prévisualiser la campagne Search
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                excel_file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+
+  /campaigns/search/create:
+    post:
+      operationId: SearchCreate
+      summary: Créer une campagne Search Google Ads
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                excel_file:
+                  type: string
+                  format: binary
+
+                confirmation_code:
+                  type: string
+
+                validate_only:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
