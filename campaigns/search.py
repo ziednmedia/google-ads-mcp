@@ -8,6 +8,9 @@ from fastapi import APIRouter, File, Form, UploadFile
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 
+from google.ads.googleads.client import (
+    GoogleAdsClient
+)
 
 from services.search_campaign_service import (
     SearchCampaignService,
@@ -2041,9 +2044,40 @@ async def create_search_campaign(
             )
         )
 
-        client = (
-            GoogleAdsClient
-            .load_from_env()
+        
+
+        config = {
+            "developer_token":
+                os.getenv(
+                    "GOOGLE_ADS_DEVELOPER_TOKEN"
+            ),
+
+            "client_id":
+                os.getenv(
+                    "GOOGLE_ADS_CLIENT_ID"
+            ),
+
+            "client_secret":
+                os.getenv(
+                    "GOOGLE_ADS_CLIENT_SECRET"
+            ),
+
+            "refresh_token":
+                os.getenv(
+                    "GOOGLE_ADS_REFRESH_TOKEN"
+            ),
+
+            "login_customer_id":
+                os.getenv(
+                    "GOOGLE_ADS_LOGIN_CUSTOMER_ID"
+            ),
+
+            "use_proto_plus":
+                True,
+        }
+
+        client = GoogleAdsClient.load_from_dict(
+            config
         )
 
         language_ids = (
