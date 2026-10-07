@@ -1197,6 +1197,12 @@ def _create_campaign(
         "campaign_name"
     ]
 
+    campaign.contains_eu_political_advertising = (
+        client.enums
+        .EuPoliticalAdvertisingStatusEnum
+        .DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING
+    )
+
     campaign.advertising_channel_type = (
         client.enums
         .AdvertisingChannelTypeEnum
