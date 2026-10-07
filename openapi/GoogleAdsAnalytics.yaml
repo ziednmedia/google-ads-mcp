@@ -1,0 +1,295 @@
+openapi: 3.0.1
+
+info:
+  title: Google Ads Analytics
+  version: 1.0.0
+  description: Analyse et optimisation Google Ads
+
+servers:
+  - url: https://google-ads-mcp-165964728033.europe-west1.run.app
+
+paths:
+
+  /health:
+    get:
+      operationId: Health
+      summary: API Health Check
+      responses:
+        "200":
+          description: OK
+
+  /campaign-performance:
+    get:
+      operationId: CampaignPerformance
+      summary: Campaign Performance
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: period
+          in: query
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /account-insights:
+    get:
+      operationId: AccountInsights
+      summary: Account Insights
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /executive-summary:
+    get:
+      operationId: ExecutiveSummary
+      summary: Executive Summary
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /action-plan:
+    get:
+      operationId: ActionPlan
+      summary: Action Plan
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /keywords:
+    get:
+      operationId: Keywords
+      summary: Keywords
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /ads:
+    get:
+      operationId: Ads
+      summary: Ads
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /search-terms:
+    get:
+      operationId: SearchTerms
+      summary: Search Terms
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /search-term-opportunities:
+    get:
+      operationId: SearchTermOpportunities
+      summary: Search Term Opportunities
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /device-performance:
+    get:
+      operationId: DevicePerformance
+      summary: Device Performance
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /device-opportunities:
+    get:
+      operationId: DeviceOpportunities
+      summary: Device Opportunities
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /network-performance:
+    get:
+      operationId: NetworkPerformance
+      summary: Network Performance
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /network-opportunities:
+    get:
+      operationId: NetworkOpportunities
+      summary: Network Opportunities
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /pmax-asset-analysis:
+    get:
+      operationId: PmaxAssetAnalysis
+      summary: Performance Max Asset Analysis
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
+
+  /optimization-opportunities:
+    get:
+      operationId: OptimizationOpportunities
+      summary: Optimization Opportunities
+
+      parameters:
+
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: OK
