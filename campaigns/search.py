@@ -2041,8 +2041,6 @@ async def create_search_campaign(
             )
         )
 
-        import os
-
         return {
             "status": "DEBUG",
 
