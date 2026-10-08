@@ -7831,6 +7831,10 @@ def remove_keyword(
 ):
     try:
 
+        # ----------------------------------------------------
+        # NORMALISATION
+        # ----------------------------------------------------
+
         customer_id = normalize_customer_id(
             request.customer_id
         )
@@ -7853,26 +7857,200 @@ def remove_keyword(
             .strip()
         )
 
+        # ----------------------------------------------------
+        # VALIDATION DU CODE
+        # ----------------------------------------------------
+
         expected_code = os.getenv(
             "CONFIRMATION_CODE"
         )
 
-        if request.confirmation_code != expected_code:
-
+        if not expected_code:
             return {
                 "status": "FAILED",
-                "error": "Confirmation code invalid"
+                "action": "REMOVE_KEYWORD",
+                "error": (
+                    "CONFIRMATION_CODE is not configured"
+                ),
+                "automatic_action": False,
             }
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "action": "REMOVE_KEYWORD",
+                "error": (
+                    "Confirmation code invalid"
+                ),
+                "automatic_action": False,
+            }
+
+        # ----------------------------------------------------
+        # SERVICES
+        # ----------------------------------------------------
 
         client = get_google_ads_client()
 
-        google_ads_service = client.get_service(
-            "GoogleAdsService"
+        google_ads_service = (
+            client.get_service(
+                "GoogleAdsService"
+            )
         )
 
         ad_group_criterion_service = (
-            client.get
+            client.get_service(
+                "AdGroupCriterionService"
+            )
+        )
 
+        # ----------------------------------------------------
+        # RECHERCHE DU MOT-CLÉ
+        # ----------------------------------------------------
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                ad_group.id,
+                ad_group.name,
+
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.status,
+                ad_group_criterion.resource_name,
+
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type
+
+            FROM ad_group_criterion
+
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_criterion.criterion_id = {criterion_id}
+        """
+
+        response = (
+            google_ads_service.search(
+                customer_id=customer_id,
+                query=query,
+            )
+        )
+
+        row = next(
+            iter(response),
+            None
+        )
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "action": "REMOVE_KEYWORD",
+                "error": "Keyword not found",
+                "automatic_action": False,
+            }
+
+        keyword = (
+            row.ad_group_criterion
+            .keyword
+            .text
+        )
+
+        match_type = enum_name(
+            row.ad_group_criterion
+            .keyword
+            .match_type
+        )
+
+        previous_status = enum_name(
+            row.ad_group_criterion
+            .status
+        )
+
+        resource_name = (
+            row.ad_group_criterion
+            .resource_name
+        )
+
+        # ----------------------------------------------------
+        # REMOVE
+        # ----------------------------------------------------
+
+        operation = client.get_type(
+            "AdGroupCriterionOperation"
+        )
+
+        operation.remove = resource_name
+
+        result = (
+            ad_group_criterion_service
+            .mutate_ad_group_criteria(
+                customer_id=customer_id,
+                operations=[
+                    operation
+                ],
+            )
+        )
+
+        # ----------------------------------------------------
+        # SUCCÈS
+        # ----------------------------------------------------
+
+        return {
+            "status": "SUCCESS",
+            "action": "REMOVE_KEYWORD",
+
+            "customer_id":
+                customer_id,
+
+            "campaign_id":
+                campaign_id,
+
+            "campaign_name":
+                row.campaign.name,
+
+            "ad_group_id":
+                ad_group_id,
+
+            "ad_group_name":
+                row.ad_group.name,
+
+            "criterion_id":
+                criterion_id,
+
+            "keyword":
+                keyword,
+
+            "match_type":
+                match_type,
+
+            "previous_status":
+                previous_status,
+
+            "resource_name":
+                result.results[0]
+                .resource_name,
+
+            "keyword_removed":
+                True,
+
+            "automatic_action":
+                False,
+
+            "human_confirmation_validated":
+                True,
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "action": "REMOVE_KEYWORD",
+            "automatic_action": False,
+            "error": str(error),
+        }
 # ============================================================
 # ADD NEGATIVE KEYWORD
 # Modification protégée par code de confirmation
