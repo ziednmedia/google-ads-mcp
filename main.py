@@ -31,6 +31,13 @@ class AdGroupActionRequest(BaseModel):
     ad_group_id: str
     confirmation_code: str
 
+class AdActionRequest(BaseModel):
+    customer_id: str
+    campaign_id: str
+    ad_group_id: str
+    ad_id: str
+    confirmation_code: str
+
 class AddNegativeKeywordRequest(
     BaseModel
 ):
@@ -59,6 +66,15 @@ class AddKeywordRequest(
     ad_group_id: str
     keyword: str
     match_type: str = "EXACT"
+    confirmation_code: str
+    
+class KeywordActionRequest(
+    BaseModel
+):
+    customer_id: str
+    campaign_id: str
+    ad_group_id: str
+    criterion_id: str
     confirmation_code: str
 
 
@@ -7434,6 +7450,429 @@ def remove_negative_keyword(
             "automatic_action": False,
             "error": str(error),
         }
+
+# ============================================================
+# PAUSE KEYWORD
+# ENABLE KEYWORD
+# REMOVE KEYWORD
+# ============================================================
+# ----------------------------------------------------
+# ENABLE KEYWORD
+# ----------------------------------------------------
+@app.post("/enable-keyword")
+def enable_keyword(
+    request: KeywordActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        criterion_id = (
+            request.criterion_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if not expected_code:
+            return {
+                "status": "FAILED",
+                "error": (
+                    "CONFIRMATION_CODE is not configured"
+                )
+            }
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "error": (
+                    "Confirmation code invalid"
+                )
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = (
+            client.get_service(
+                "GoogleAdsService"
+            )
+        )
+
+        ad_group_criterion_service = (
+            client.get_service(
+                "AdGroupCriterionService"
+            )
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                ad_group.id,
+                ad_group.name,
+
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.status,
+                ad_group_criterion.resource_name,
+
+                ad_group_criterion.keyword.text,
+                ad_group_criterion.keyword.match_type
+
+            FROM ad_group_criterion
+
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_criterion.criterion_id = {criterion_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(
+            iter(response),
+            None
+        )
+
+        if not row:
+
+            return {
+                "status": "FAILED",
+                "error": "Keyword not found"
+            }
+
+        previous_status = enum_name(
+            row.ad_group_criterion.status
+        )
+
+        if previous_status == "ENABLED":
+
+            return {
+                "status": "NO_CHANGE",
+
+                "campaign_id":
+                    campaign_id,
+
+                "campaign_name":
+                    row.campaign.name,
+
+                "ad_group_id":
+                    ad_group_id,
+
+                "ad_group_name":
+                    row.ad_group.name,
+
+                "criterion_id":
+                    criterion_id,
+
+                "keyword":
+                    row.ad_group_criterion
+                    .keyword
+                    .text,
+
+                "previous_status":
+                    previous_status,
+
+                "new_status":
+                    "ENABLED",
+
+                "message":
+                    "Keyword is already enabled"
+            }
+
+        operation = client.get_type(
+            "AdGroupCriterionOperation"
+        )
+
+        operation.update.resource_name = (
+            row.ad_group_criterion.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AdGroupCriterionStatusEnum
+            .ENABLED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            ad_group_criterion_service
+            .mutate_ad_group_criteria(
+                customer_id=customer_id,
+                operations=[
+                    operation
+                ]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+
+            "campaign_id":
+                campaign_id,
+
+            "campaign_name":
+                row.campaign.name,
+
+            "ad_group_id":
+                ad_group_id,
+
+            "ad_group_name":
+                row.ad_group.name,
+
+            "criterion_id":
+                criterion_id,
+
+            "keyword":
+                row.ad_group_criterion
+                .keyword
+                .text,
+
+            "match_type":
+                enum_name(
+                    row.ad_group_criterion
+                    .keyword
+                    .match_type
+                ),
+
+            "previous_status":
+                previous_status,
+
+            "new_status":
+                "ENABLED",
+
+            "resource_name":
+                result.results[0]
+                .resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+# ----------------------------------------------------
+# PAUSE KEYWORD
+# ----------------------------------------------------
+@app.post("/pause-keyword")
+def pause_keyword(
+    request: KeywordActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        criterion_id = (
+            request.criterion_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if request.confirmation_code != expected_code:
+
+            return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        ad_group_criterion_service = (
+            client.get_service(
+                "AdGroupCriterionService"
+            )
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+                ad_group.id,
+                ad_group.name,
+                ad_group_criterion.criterion_id,
+                ad_group_criterion.status,
+                ad_group_criterion.resource_name,
+                ad_group_criterion.keyword.text
+            FROM ad_group_criterion
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_criterion.criterion_id = {criterion_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+
+            return {
+                "status": "FAILED",
+                "error": "Keyword not found"
+            }
+
+        previous_status = enum_name(
+            row.ad_group_criterion.status
+        )
+
+        if previous_status == "PAUSED":
+
+            return {
+                "status": "NO_CHANGE",
+                "keyword":
+                    row.ad_group_criterion.keyword.text,
+                "previous_status":
+                    previous_status,
+                "new_status":
+                    "PAUSED"
+            }
+
+        operation = client.get_type(
+            "AdGroupCriterionOperation"
+        )
+
+        operation.update.resource_name = (
+            row.ad_group_criterion.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AdGroupCriterionStatusEnum
+            .PAUSED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            ad_group_criterion_service
+            .mutate_ad_group_criteria(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "keyword":
+                row.ad_group_criterion.keyword.text,
+            "previous_status":
+                previous_status,
+            "new_status":
+                "PAUSED",
+            "resource_name":
+                result.results[0].resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+
+# ----------------------------------------------------
+# REMOVE KEYWORD
+# ----------------------------------------------------
+@app.post("/remove-keyword")
+def remove_keyword(
+    request: KeywordActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        criterion_id = (
+            request.criterion_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if request.confirmation_code != expected_code:
+
+            return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        ad_group_criterion_service = (
+            client.get
+
 # ============================================================
 # ADD NEGATIVE KEYWORD
 # Modification protégée par code de confirmation
