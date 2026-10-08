@@ -97,6 +97,20 @@ paths:
       responses:
         "200":
           description: Success
+          
+  /pause-keyword:
+    post:
+      operationId: PauseKeyword
+      summary: Pause Keyword
+  /enable-keyword:
+    post:
+      operationId: EnableKeyword
+      summary: Enable Keyword
+
+  /remove-keyword:
+    post:
+      operationId: RemoveKeyword
+      summary: Remove Keyword
 
   /campaign-performance:
     get:
