@@ -18,6 +18,86 @@ paths:
         "200":
           description: OK
 
+  /accounts:
+    get:
+      operationId: Accounts
+      summary: List Google Ads Accounts
+      responses:
+        "200":
+          description: Success
+          
+  /add-keyword:
+    post:
+      operationId: AddKeyword
+      summary: Add Keyword
+      responses:
+        "200":
+          description: Success
+
+  /add-negative-keyword:
+    post:
+      operationId: AddNegativeKeyword
+      summary: Add Negative Keyword
+      responses:
+        "200":
+          description: Success
+
+  /remove-negative-keyword:
+    post:
+      operationId: RemoveNegativeKeyword
+      summary: Remove Negative Keyword
+      responses:
+        "200":
+          description: Success
+
+  /pause-campaign:
+    post:
+      operationId: PauseCampaign
+      summary: Pause Campaign
+      responses:
+        "200":
+          description: Success
+          
+  /enable-campaign:
+    post:
+      operationId: EnableCampaign
+      summary: Enable Campaign
+      responses:
+        "200":
+          description: Success
+          
+  /pause-ad-group:
+    post:
+      operationId: PauseAdGroup
+      summary: Pause Ad Group
+      responses:
+        "200":
+          description: Success
+          
+  /enable-ad-group:
+    post:
+      operationId: EnableAdGroup
+      summary: Enable Ad Group
+      responses:
+        "200":
+          description: Success
+          
+  /update-budget:
+    post:
+      operationId: UpdateBudget
+      summary: Update Campaign Budget
+      responses:
+        "200":
+          description: Success
+
+  /preview-budget-update:
+    post:
+      operationId: PreviewBudgetUpdate
+      summary: Preview Budget Update
+      responses:
+        "200":
+          description: Success
+
   /campaign-performance:
     get:
       operationId: CampaignPerformance
