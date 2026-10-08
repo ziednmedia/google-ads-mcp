@@ -5183,6 +5183,7 @@ def ads(
                 ad_group.name,
 
                 ad_group_ad.ad.id,
+                ad_group_ad.resource_name,
                 ad_group_ad.status,
                 ad_group_ad.ad.type,
                 ad_group_ad.ad_strength,
@@ -5281,10 +5282,14 @@ def ads(
 
                     "ad_group_name": (
                         row.ad_group.name
-                    ),
+                    ), 
 
                     "ad_id": str(
                         row.ad_group_ad.ad.id
+                    ),
+
+                    "resource_name": (
+                        row.ad_group_ad.resource_name
                     ),
 
                     "status": enum_name(
