@@ -12066,6 +12066,89 @@ def pmax_asset_analysis(
         }
 
 # ============================================================
+# endpoint de découverte
+# ============================================================
+@app.get("/asset-groups-test")
+def asset_groups_test(
+    customer_id: str,
+    campaign_id: str,
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        client = get_google_ads_client()
+
+        service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                asset_group.id,
+                asset_group.name,
+                asset_group.status,
+                asset_group.primary_status
+
+            FROM asset_group
+
+            WHERE campaign.id = {campaign_id}
+        """
+
+        response = service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        data = []
+
+        for row in response:
+
+            data.append({
+                "campaign_id":
+                    str(
+                        row.campaign.id
+                    ),
+
+                "campaign_name":
+                    row.campaign.name,
+
+                "asset_group_id":
+                    str(
+                        row.asset_group.id
+                    ),
+
+                "asset_group_name":
+                    row.asset_group.name,
+
+                "status":
+                    enum_name(
+                        row.asset_group.status
+                    ),
+
+                "primary_status":
+                    enum_name(
+                        row.asset_group.primary_status
+                    ),
+            })
+
+        return {
+            "status": "SUCCESS",
+            "asset_groups": data
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+# ============================================================
 # OPTIMIZATION OPPORTUNITIES
 # Analyse à la demande d'une campagne précise
 # AUCUNE modification automatique
