@@ -77,6 +77,15 @@ class KeywordActionRequest(
     criterion_id: str
     confirmation_code: str
 
+class AdActionRequest(
+    BaseModel
+):
+    customer_id: str
+    campaign_id: str
+    ad_group_id: str
+    ad_id: str
+    confirmation_code: str
+
 
 app = FastAPI(
     title="Google Ads Optimization API",
@@ -8050,6 +8059,410 @@ def remove_keyword(
             "action": "REMOVE_KEYWORD",
             "automatic_action": False,
             "error": str(error),
+        }
+
+# ============================================================
+# ENABLE AD
+# PAUSE AD
+# REMOVE AD
+# ============================================================
+# ----------------------------------------------------
+# ENABLE AD
+# ----------------------------------------------------
+@app.post("/enable-ad")
+def pause_ad(
+    request: AdActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_id = (
+            request.ad_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if request.confirmation_code != expected_code:
+            return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        ad_group_ad_service = client.get_service(
+            "AdGroupAdService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                ad_group.id,
+                ad_group.name,
+
+                ad_group_ad.ad.id,
+                ad_group_ad.status,
+                ad_group_ad.resource_name
+
+            FROM ad_group_ad
+
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_ad.ad.id = {ad_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error": "Ad not found"
+            }
+
+        previous_status = enum_name(
+            row.ad_group_ad.status
+        )
+
+        if previous_status == "ENABLED":
+            return {
+                "status": "NO_CHANGE",
+                "ad_id": ad_id,
+                "previous_status": previous_status,
+                "new_status": "PAUSED"
+            }
+
+        operation = client.get_type(
+            "AdGroupAdOperation"
+        )
+
+        operation.update.resource_name = (
+            row.ad_group_ad.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AdGroupAdStatusEnum
+            .ENABLED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            ad_group_ad_service
+            .mutate_ad_group_ads(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_id": campaign_id,
+            "campaign_name": row.campaign.name,
+            "ad_group_id": ad_group_id,
+            "ad_group_name": row.ad_group.name,
+            "ad_id": ad_id,
+            "previous_status": previous_status,
+            "new_status": "ENABLED",
+            "resource_name":
+                result.results[0].resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+# ----------------------------------------------------
+# PAUSE AD
+# ----------------------------------------------------
+@app.post("/pause-ad")
+def pause_ad(
+    request: AdActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_id = (
+            request.ad_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if request.confirmation_code != expected_code:
+            return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        ad_group_ad_service = client.get_service(
+            "AdGroupAdService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                ad_group.id,
+                ad_group.name,
+
+                ad_group_ad.ad.id,
+                ad_group_ad.status,
+                ad_group_ad.resource_name
+
+            FROM ad_group_ad
+
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_ad.ad.id = {ad_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error": "Ad not found"
+            }
+
+        previous_status = enum_name(
+            row.ad_group_ad.status
+        )
+
+        if previous_status == "PAUSED":
+            return {
+                "status": "NO_CHANGE",
+                "ad_id": ad_id,
+                "previous_status": previous_status,
+                "new_status": "PAUSED"
+            }
+
+        operation = client.get_type(
+            "AdGroupAdOperation"
+        )
+
+        operation.update.resource_name = (
+            row.ad_group_ad.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AdGroupAdStatusEnum
+            .PAUSED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            ad_group_ad_service
+            .mutate_ad_group_ads(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_id": campaign_id,
+            "campaign_name": row.campaign.name,
+            "ad_group_id": ad_group_id,
+            "ad_group_name": row.ad_group.name,
+            "ad_id": ad_id,
+            "previous_status": previous_status,
+            "new_status": "PAUSED",
+            "resource_name":
+                result.results[0].resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+
+# ----------------------------------------------------
+# REMOVE AD
+# ----------------------------------------------------
+@app.post("/remove-ad")
+def remove_ad(
+    request: AdActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        campaign_id = (
+            request.campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_group_id = (
+            request.ad_group_id
+            .replace("-", "")
+            .strip()
+        )
+
+        ad_id = (
+            request.ad_id
+            .replace("-", "")
+            .strip()
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if request.confirmation_code != expected_code:
+            return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        ad_group_ad_service = client.get_service(
+            "AdGroupAdService"
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                ad_group.id,
+                ad_group.name,
+
+                ad_group_ad.ad.id,
+                ad_group_ad.status,
+                ad_group_ad.resource_name
+
+            FROM ad_group_ad
+
+            WHERE campaign.id = {campaign_id}
+              AND ad_group.id = {ad_group_id}
+              AND ad_group_ad.ad.id = {ad_id}
+        """
+
+        response = google_ads_service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(iter(response), None)
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error": "Ad not found"
+            }
+
+        operation = client.get_type(
+            "AdGroupAdOperation"
+        )
+
+        operation.remove = (
+            row.ad_group_ad.resource_name
+        )
+
+        result = (
+            ad_group_ad_service
+            .mutate_ad_group_ads(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+            "campaign_id": campaign_id,
+            "campaign_name": row.campaign.name,
+            "ad_group_id": ad_group_id,
+            "ad_group_name": row.ad_group.name,
+            "ad_id": ad_id,
+            "removed": True,
+            "resource_name":
+                result.results[0].resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
         }
 # ============================================================
 # ADD NEGATIVE KEYWORD
