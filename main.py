@@ -31,6 +31,12 @@ class AdGroupActionRequest(BaseModel):
     ad_group_id: str
     confirmation_code: str
 
+class AssetGroupActionRequest(BaseModel):
+    customer_id: str
+    campaign_id: str
+    asset_group_id: str
+    confirmation_code: str
+
 class AdActionRequest(BaseModel):
     customer_id: str
     campaign_id: str
@@ -12066,10 +12072,15 @@ def pmax_asset_analysis(
         }
 
 # ============================================================
-# endpoint de découverte
+# ASSET GROUPS
+# PAUSE ASSET GROUP
+# ENABLE ASSET GROUP
 # ============================================================
-@app.get("/asset-groups-test")
-def asset_groups_test(
+# ----------------------------------------------------
+# ASSET GROUPS
+# ----------------------------------------------------
+@app.get("/asset-groups")
+def asset_groups(
     customer_id: str,
     campaign_id: str,
 ):
@@ -12077,6 +12088,12 @@ def asset_groups_test(
 
         customer_id = normalize_customer_id(
             customer_id
+        )
+
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
         )
 
         client = get_google_ads_client()
@@ -12093,7 +12110,8 @@ def asset_groups_test(
                 asset_group.id,
                 asset_group.name,
                 asset_group.status,
-                asset_group.primary_status
+                asset_group.primary_status,
+                asset_group.resource_name
 
             FROM asset_group
 
@@ -12109,37 +12127,338 @@ def asset_groups_test(
 
         for row in response:
 
-            data.append({
-                "campaign_id":
-                    str(
-                        row.campaign.id
-                    ),
+            data.append(
+                {
+                    "campaign_id":
+                        str(
+                            row.campaign.id
+                        ),
 
-                "campaign_name":
-                    row.campaign.name,
+                    "campaign_name":
+                        row.campaign.name,
 
-                "asset_group_id":
-                    str(
-                        row.asset_group.id
-                    ),
+                    "asset_group_id":
+                        str(
+                            row.asset_group.id
+                        ),
 
-                "asset_group_name":
-                    row.asset_group.name,
+                    "asset_group_name":
+                        row.asset_group.name,
 
-                "status":
-                    enum_name(
-                        row.asset_group.status
-                    ),
+                    "status":
+                        enum_name(
+                            row.asset_group.status
+                        ),
 
-                "primary_status":
-                    enum_name(
-                        row.asset_group.primary_status
-                    ),
-            })
+                    "primary_status":
+                        enum_name(
+                            row.asset_group.primary_status
+                        ),
+
+                    "resource_name":
+                        row.asset_group.resource_name,
+                }
+            )
 
         return {
             "status": "SUCCESS",
             "asset_groups": data
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+
+# ----------------------------------------------------
+# PAUSE ASSET GROUP
+# ----------------------------------------------------
+@app.post("/pause-asset-group")
+def pause_asset_group(
+    request: AssetGroupActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        asset_group_service = (
+            client.get_service(
+                "AssetGroupService"
+            )
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                asset_group.id,
+                asset_group.name,
+                asset_group.status,
+                asset_group.resource_name
+
+            FROM asset_group
+
+            WHERE campaign.id = {request.campaign_id}
+              AND asset_group.id = {request.asset_group_id}
+        """
+
+        response = service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(
+            iter(response),
+            None
+        )
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error": "Asset group not found"
+            }
+
+        previous_status = enum_name(
+            row.asset_group.status
+        )
+
+        if previous_status == "PAUSED":
+
+            return {
+                "status": "NO_CHANGE",
+                "asset_group_id":
+                    str(
+                        row.asset_group.id
+                    ),
+                "new_status": "PAUSED"
+            }
+
+        operation = client.get_type(
+            "AssetGroupOperation"
+        )
+
+        operation.update.resource_name = (
+            row.asset_group.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AssetGroupStatusEnum
+            .PAUSED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            asset_group_service
+            .mutate_asset_groups(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+
+            "campaign_id":
+                str(
+                    row.campaign.id
+                ),
+
+            "campaign_name":
+                row.campaign.name,
+
+            "asset_group_id":
+                str(
+                    row.asset_group.id
+                ),
+
+            "asset_group_name":
+                row.asset_group.name,
+
+            "previous_status":
+                previous_status,
+
+            "new_status":
+                "PAUSED",
+
+            "resource_name":
+                result.results[0]
+                .resource_name
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+
+# ----------------------------------------------------
+# ENABLE ASSET GROUP
+# ----------------------------------------------------
+@app.post("/enable-asset-group")
+def enable_asset_group(
+    request: AssetGroupActionRequest
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            request.customer_id
+        )
+
+        expected_code = os.getenv(
+            "CONFIRMATION_CODE"
+        )
+
+        if (
+            request.confirmation_code
+            != expected_code
+        ):
+            return {
+                "status": "FAILED",
+                "error": "Confirmation code invalid"
+            }
+
+        client = get_google_ads_client()
+
+        service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        asset_group_service = (
+            client.get_service(
+                "AssetGroupService"
+            )
+        )
+
+        query = f"""
+            SELECT
+                campaign.id,
+                campaign.name,
+
+                asset_group.id,
+                asset_group.name,
+                asset_group.status,
+                asset_group.resource_name
+
+            FROM asset_group
+
+            WHERE campaign.id = {request.campaign_id}
+              AND asset_group.id = {request.asset_group_id}
+        """
+
+        response = service.search(
+            customer_id=customer_id,
+            query=query
+        )
+
+        row = next(
+            iter(response),
+            None
+        )
+
+        if not row:
+            return {
+                "status": "FAILED",
+                "error": "Asset group not found"
+            }
+
+        previous_status = enum_name(
+            row.asset_group.status
+        )
+
+        if previous_status == "ENABLED":
+
+            return {
+                "status": "NO_CHANGE",
+                "asset_group_id":
+                    str(
+                        row.asset_group.id
+                    ),
+                "new_status": "PAUSED"
+            }
+
+        operation = client.get_type(
+            "AssetGroupOperation"
+        )
+
+        operation.update.resource_name = (
+            row.asset_group.resource_name
+        )
+
+        operation.update.status = (
+            client.enums
+            .AssetGroupStatusEnum
+            .ENABLED
+        )
+
+        operation.update_mask.paths.append(
+            "status"
+        )
+
+        result = (
+            asset_group_service
+            .mutate_asset_groups(
+                customer_id=customer_id,
+                operations=[operation]
+            )
+        )
+
+        return {
+            "status": "SUCCESS",
+
+            "campaign_id":
+                str(
+                    row.campaign.id
+                ),
+
+            "campaign_name":
+                row.campaign.name,
+
+            "asset_group_id":
+                str(
+                    row.asset_group.id
+                ),
+
+            "asset_group_name":
+                row.asset_group.name,
+
+            "previous_status":
+                previous_status,
+
+            "new_status":
+                "ENABLED",
+
+            "resource_name":
+                result.results[0]
+                .resource_name
         }
 
     except Exception as error:
