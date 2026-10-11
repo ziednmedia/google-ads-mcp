@@ -22,7 +22,10 @@ router = APIRouter(
 )
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    tags=["Search Builder"]
+)
 def search_health():
 
     return SearchCampaignService.health()
@@ -31,7 +34,11 @@ def search_health():
 # ============================================================
 # FROM EXCEL
 # ============================================================
-@router.post("/from-excel")
+@router.post(
+    "/from-excel",
+    tags=["Search Builder"]
+    
+)
 async def create_search_from_excel(
     excel_file: UploadFile = File(...)
 ):
@@ -86,7 +93,10 @@ async def create_search_from_excel(
 # ============================================================
 # VALIDATE
 # ============================================================
-@router.post("/validate")
+@router.post(
+    "/validate",
+    tags=["Search Builder"]
+)
 async def validate_search_campaign(
     excel_file: UploadFile = File(...)
 ):
@@ -366,7 +376,10 @@ async def validate_search_campaign(
 # ============================================================
 # PREVIEW
 # ============================================================
-@router.post("/preview")
+@router.post(
+    "/preview",
+    tags=["Search Builder"]
+)
 async def preview_search_campaign(
     excel_file: UploadFile = File(...)
 ):
@@ -1845,7 +1858,10 @@ def _create_sitelinks(
 # CREATE SEARCH CAMPAIGN
 # ============================================================
 
-@router.post("/create")
+@router.post(
+    "/create",
+    tags=["Search Builder"]
+)
 async def create_search_campaign(
     excel_file: UploadFile = File(...),
     confirmation_code: str = Form(...),
