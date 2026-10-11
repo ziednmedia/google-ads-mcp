@@ -3812,7 +3812,9 @@ def preview_budget_update(
 # ============================================================
 
 @app.get("/accounts")
-def accounts():
+def accounts(
+    status: str = "ENABLED"
+):
 
     try:
 
@@ -3862,6 +3864,15 @@ def accounts():
                 continue
 
             seen.add(customer_id)
+
+            account_status = enum_name(
+                row.customer_client.status
+            )
+            
+            if status.upper() != "ALL":
+
+                if account_status != status.upper():
+                    continue
 
             results.append(
                 {
@@ -3935,7 +3946,8 @@ def accounts():
 
 @app.get("/account-search")
 def account_search(
-    name: str
+    name: str,
+    status: str = "ENABLED"
 ):
 
     try:
@@ -4003,6 +4015,15 @@ def account_search(
                 continue
 
             seen.add(customer_id)
+
+            account_status = enum_name(
+                row.customer_client.status
+            )
+
+            if status.upper() != "ALL":
+
+                if account_status != status.upper():
+                    continue
 
             results.append(
                 {
