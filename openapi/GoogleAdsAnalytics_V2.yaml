@@ -46,3 +46,19 @@ paths:
       responses:
         "200":
           description: Success
+
+  /campaign-performance:
+    get:
+      operationId: CampaignPerformance
+      summary: Campaign Performance
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
