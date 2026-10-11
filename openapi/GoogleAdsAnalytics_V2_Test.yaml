@@ -81,32 +81,6 @@ paths:
         schema:
           type: string
 
-      - name: period
-        in: query
-        required: false
-        schema:
-          type: string
-          default: LAST_30_DAYS
-
-      - name: start_date
-        in: query
-        required: false
-        schema:
-          type: string
-
-      - name: end_date
-        in: query
-        required: false
-        schema:
-          type: string
-
-      - name: minimum_clicks_for_ranking
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 5
-
     responses:
       "200":
         description: Success
