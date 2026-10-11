@@ -24,3 +24,25 @@ paths:
       responses:
         "200":
           description: Success
+          
+  /account-search:
+    get:
+      operationId: AccountSearch
+      summary: Account Search
+
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
