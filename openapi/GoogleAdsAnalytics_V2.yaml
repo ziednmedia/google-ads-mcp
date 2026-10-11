@@ -8,6 +8,7 @@ servers:
   - url: https://google-ads-mcp-165964728033.europe-west1.run.app
 
 paths:
+  
   /accounts:
     get:
       operationId: Accounts
@@ -113,3 +114,125 @@ paths:
       responses:
         "200":
           description: Success
+
+  /campaigns:
+    get:
+      operationId: Campaigns
+      summary: Campaigns
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /campaign-search:
+    get:
+      operationId: CampaignSearch
+      summary: Campaign Search
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /campaign-health:
+    get:
+      operationId: CampaignHealth
+      summary: Campaign Health
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            default: LAST_30_DAYS
+
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /top-campaigns:
+    get:
+      operationId: TopCampaigns
+      summary: Top Campaigns
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            default: LAST_30_DAYS
+
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+  
