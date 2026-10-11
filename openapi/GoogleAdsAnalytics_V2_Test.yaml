@@ -1,7 +1,7 @@
 openapi: 3.0.1
 
 info:
-  title: GoogleAdsAnalytics_V2
+  title: GoogleAdsAnalytics_V2_Test
   version: 2.0.0
 
 servers:
@@ -9,50 +9,18 @@ servers:
 
 paths:
 
-/account-insights:
-  get:
-    operationId: AccountInsights
-    summary: Account Insights
+  /accounts:
+    get:
+      operationId: Accounts
+      summary: Accounts
 
-    parameters:
-      - name: customer_id
-        in: query
-        required: true
-        schema:
-          type: string
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
 
-      - name: campaign_id
-        in: query
-        required: true
-        schema:
-          type: string
-
-      - name: period
-        in: query
-        required: false
-        schema:
-          type: string
-          default: LAST_30_DAYS
-
-      - name: start_date
-        in: query
-        required: false
-        schema:
-          type: string
-
-      - name: end_date
-        in: query
-        required: false
-        schema:
-          type: string
-
-      - name: minimum_clicks_for_ranking
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 5
-
-    responses:
-      "200":
-        description: Success
+      responses:
+        "200":
+          description: Success
