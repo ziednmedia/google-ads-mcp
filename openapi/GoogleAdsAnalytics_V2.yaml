@@ -3,7 +3,6 @@ openapi: 3.0.1
 info:
   title: GoogleAdsAnalytics_V2
   version: 2.0.0
-  description: Google Ads Analytics and Mutations
 
 servers:
   - url: https://google-ads-mcp-165964728033.europe-west1.run.app
@@ -13,219 +12,242 @@ paths:
   /accounts:
     get:
       operationId: Accounts
-      summary: List Accounts
+      summary: Accounts
+
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
 
   /account-search:
     get:
       operationId: AccountSearch
-      summary: Search Accounts
+      summary: Account Search
 
-  /campaigns:
-    get:
-      operationId: Campaigns
-      summary: List Campaigns
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
 
-  /campaign-search:
-    get:
-      operationId: CampaignSearch
-      summary: Campaign Search
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
 
   /campaign-performance:
-    get:
-      operationId: CampaignPerformance
-      summary: Campaign Performance
+  get:
+    operationId: CampaignPerformance
+    summary: Campaign Performance
 
-  /campaign-health:
-    get:
-      operationId: CampaignHealth
-      summary: Campaign Health
+    parameters:
+      - name: customer_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /top-campaigns:
-    get:
-      operationId: TopCampaigns
-      summary: Top Campaigns
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+          default: LAST_30_DAYS
 
-  /pause-campaign:
-    post:
-      operationId: PauseCampaign
-      summary: Pause Campaign
+      - name: start_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /enable-campaign:
-    post:
-      operationId: EnableCampaign
-      summary: Enable Campaign
+      - name: end_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /ad-groups:
-    get:
-      operationId: AdGroups
-      summary: Ad Groups
+    responses:
+      "200":
+        description: Success
 
-  /ad-group-search:
-    get:
-      operationId: AdGroupSearch
-      summary: Ad Group Search
+          
+/account-insights:
+  get:
+    operationId: AccountInsights
+    summary: Account Insights
 
-  /top-ad-groups:
-    get:
-      operationId: TopAdGroups
-      summary: Top Ad Groups
+    parameters:
+      - name: customer_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /pause-ad-group:
-    post:
-      operationId: PauseAdGroup
-      summary: Pause Ad Group
+      - name: campaign_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /enable-ad-group:
-    post:
-      operationId: EnableAdGroup
-      summary: Enable Ad Group
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+          default: LAST_30_DAYS
 
-  /keywords:
-    get:
-      operationId: Keywords
-      summary: Keywords
+      - name: start_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /top-keywords:
-    get:
-      operationId: TopKeywords
-      summary: Top Keywords
+      - name: end_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /negative-keywords:
-    get:
-      operationId: NegativeKeywords
-      summary: Negative Keywords
+      - name: minimum_clicks_for_ranking
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 5
 
-  /add-keyword:
-    post:
-      operationId: AddKeyword
-      summary: Add Keyword
+    responses:
+      "200":
+        description: Success
 
-  /add-negative-keyword:
-    post:
-      operationId: AddNegativeKeyword
-      summary: Add Negative Keyword
+/campaigns:
+  get:
+    operationId: Campaigns
+    summary: List Campaigns
 
-  /remove-negative-keyword:
-    post:
-      operationId: RemoveNegativeKeyword
-      summary: Remove Negative Keyword
+    parameters:
+      - name: customer_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /pause-keyword:
-    post:
-      operationId: PauseKeyword
-      summary: Pause Keyword
+    responses:
+      "200":
+        description: Success
 
-  /enable-keyword:
-    post:
-      operationId: EnableKeyword
-      summary: Enable Keyword
+/campaign-search:
+  get:
+    operationId: CampaignSearch
+    summary: Search Campaign
 
-  /remove-keyword:
-    post:
-      operationId: RemoveKeyword
-      summary: Remove Keyword
+    parameters:
+      - name: customer_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /ads:
-    get:
-      operationId: Ads
-      summary: Ads
+      - name: name
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /pause-ad:
-    post:
-      operationId: PauseAd
-      summary: Pause Ad
+    responses:
+      "200":
+        description: Success
 
-  /enable-ad:
-    post:
-      operationId: EnableAd
-      summary: Enable Ad
+/campaign-health:
+  get:
+    operationId: CampaignHealth
+    summary: Campaign Health
 
-  /remove-ad:
-    post:
-      operationId: RemoveAd
-      summary: Remove Ad
+    parameters:
+      - name: customer_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /search-terms:
-    get:
-      operationId: SearchTerms
-      summary: Search Terms
+      - name: campaign_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /top-search-terms:
-    get:
-      operationId: TopSearchTerms
-      summary: Top Search Terms
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+          default: LAST_30_DAYS
 
-  /search-term-opportunities:
-    get:
-      operationId: SearchTermOpportunities
-      summary: Search Term Opportunities
+      - name: start_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /device-performance:
-    get:
-      operationId: DevicePerformance
-      summary: Device Performance
+      - name: end_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /device-opportunities:
-    get:
-      operationId: DeviceOpportunities
-      summary: Device Opportunities
+    responses:
+      "200":
+        description: Success
 
-  /network-performance:
-    get:
-      operationId: NetworkPerformance
-      summary: Network Performance
+/top-campaigns:
+  get:
+    operationId: TopCampaigns
+    summary: Top Campaigns
 
-  /network-opportunities:
-    get:
-      operationId: NetworkOpportunities
-      summary: Network Opportunities
+    parameters:
+      - name: customer_id
+        in: query
+        required: true
+        schema:
+          type: string
 
-  /account-insights:
-    get:
-      operationId: AccountInsights
-      summary: Account Insights
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 10
 
-  /executive-summary:
-    get:
-      operationId: ExecutiveSummary
-      summary: Executive Summary
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+          default: LAST_30_DAYS
 
-  /action-plan:
-    get:
-      operationId: ActionPlan
-      summary: Action Plan
+      - name: start_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /optimization-opportunities:
-    get:
-      operationId: OptimizationOpportunities
-      summary: Optimization Opportunities
+      - name: end_date
+        in: query
+        required: false
+        schema:
+          type: string
 
-  /update-budget:
-    post:
-      operationId: UpdateBudget
-      summary: Update Budget
-
-  /preview-budget-update:
-    post:
-      operationId: PreviewBudgetUpdate
-      summary: Preview Budget Update
-
-  /pmax-asset-analysis:
-    get:
-      operationId: PmaxAssetAnalysis
-      summary: PMax Asset Analysis
-
-  /asset-groups:
-    get:
-      operationId: AssetGroups
-      summary: Asset Groups
-
-  /pause-asset-group:
-    post:
-      operationId: PauseAssetGroup
-      summary: Pause Asset Group
-
-  /enable-asset-group:
-    post:
-      operationId: EnableAssetGroup
-      summary: Enable Asset Group
+    responses:
+      "200":
+        description: Success
