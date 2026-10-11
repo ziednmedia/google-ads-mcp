@@ -8259,7 +8259,7 @@ def remove_keyword(
     "/enable-ad",
     tags=["Ads"]
 )
-def pause_ad(
+def enable_ad(
     request: AdActionRequest
 ):
     try:
