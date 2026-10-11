@@ -235,4 +235,493 @@ paths:
       responses:
         "200":
           description: Success
-  
+  /ad-groups:
+    get:
+      operationId: AdGroups
+      summary: Ad Groups
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            default: LAST_30_DAYS
+
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /ad-group-search:
+    get:
+      operationId: AdGroupSearch
+      summary: Ad Group Search
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /top-ad-groups:
+    get:
+      operationId: TopAdGroups
+      summary: Top Ad Groups
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+
+        - name: ranking_by
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ROAS
+
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            default: LAST_30_DAYS
+
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /pause-ad-group:
+    post:
+      operationId: PauseAdGroup
+      summary: Pause Ad Group
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+
+      responses:
+        "200":
+          description: Success
+
+  /enable-ad-group:
+    post:
+      operationId: EnableAdGroup
+      summary: Enable Ad Group
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+
+      responses:
+        "200":
+          description: Success
+  /keywords:
+    get:
+      operationId: Keywords
+      summary: Keywords
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            default: LAST_30_DAYS
+
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /top-keywords:
+    get:
+      operationId: TopKeywords
+      summary: Top Keywords
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+
+        - name: ranking_by
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ROAS
+
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            default: LAST_30_DAYS
+
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /negative-keywords:
+    get:
+      operationId: NegativeKeywords
+      summary: Negative Keywords
+
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+        - name: campaign_id
+          in: query
+          required: true
+          schema:
+            type: string
+
+      responses:
+        "200":
+          description: Success
+
+  /add-keyword:
+    post:
+      operationId: AddKeyword
+      summary: Add Keyword
+
+      responses:
+        "200":
+          description: Success
+
+  /add-negative-keyword:
+    post:
+      operationId: AddNegativeKeyword
+      summary: Add Negative Keyword
+
+      responses:
+        "200":
+          description: Success
+
+  /remove-negative-keyword:
+    post:
+      operationId: RemoveNegativeKeyword
+      summary: Remove Negative Keyword
+
+      responses:
+        "200":
+          description: Success
+
+  /pause-keyword:
+    post:
+      operationId: PauseKeyword
+      summary: Pause Keyword
+
+      responses:
+        "200":
+          description: Success
+
+  /enable-keyword:
+    post:
+      operationId: EnableKeyword
+      summary: Enable Keyword
+
+      responses:
+        "200":
+          description: Success
+
+  /remove-keyword:
+    post:
+      operationId: RemoveKeyword
+      summary: Remove Keyword
+
+      responses:
+        "200":
+          description: Success
+  /ads:
+    get:
+      operationId: Ads
+      summary: Ads
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: campaign_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: ad_group_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ads list
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /pause-ad:
+    post:
+      operationId: PauseAd
+      summary: Pause Ad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - ad_id
+              properties:
+                customer_id:
+                  type: string
+                ad_id:
+                  type: string
+      responses:
+        "200":
+          description: Ad paused
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /enable-ad:
+    post:
+      operationId: EnableAd
+      summary: Enable Ad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - ad_id
+              properties:
+                customer_id:
+                  type: string
+                ad_id:
+                  type: string
+      responses:
+        "200":
+          description: Ad enabled
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /remove-ad:
+    post:
+      operationId: RemoveAd
+      summary: Remove Ad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - ad_id
+              properties:
+                customer_id:
+                  type: string
+                ad_id:
+                  type: string
+      responses:
+        "200":
+          description: Ad removed
+          content:
+            application/json:
+              schema:
+                type: object
+  /asset-groups:
+    get:
+      operationId: AssetGroups
+      summary: Asset Groups
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: campaign_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset groups list
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /top-asset-groups:
+    get:
+      operationId: TopAssetGroups
+      summary: Top Asset Groups
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Top asset groups
+          content:
+            application/json:
+              schema:
+                type: object
+  /pause-asset-group:
+    post:
+      operationId: PauseAssetGroup
+      summary: Pause Asset Group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - asset_group_id
+              properties:
+                customer_id:
+                  type: string
+                asset_group_id:
+                  type: string
+      responses:
+        "200":
+          description: Asset group paused
+          content:
+            application/json:
+              schema:
+                type: object
