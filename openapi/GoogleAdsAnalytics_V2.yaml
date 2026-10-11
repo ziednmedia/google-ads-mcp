@@ -3,8 +3,229 @@ openapi: 3.0.1
 info:
   title: GoogleAdsAnalytics_V2
   version: 2.0.0
+  description: Google Ads Analytics and Mutations
 
 servers:
   - url: https://google-ads-mcp-165964728033.europe-west1.run.app
 
-paths: {}
+paths:
+
+  /accounts:
+    get:
+      operationId: Accounts
+      summary: List Accounts
+
+  /account-search:
+    get:
+      operationId: AccountSearch
+      summary: Search Accounts
+
+  /campaigns:
+    get:
+      operationId: Campaigns
+      summary: List Campaigns
+
+  /campaign-search:
+    get:
+      operationId: CampaignSearch
+      summary: Campaign Search
+
+  /campaign-performance:
+    get:
+      operationId: CampaignPerformance
+      summary: Campaign Performance
+
+  /campaign-health:
+    get:
+      operationId: CampaignHealth
+      summary: Campaign Health
+
+  /top-campaigns:
+    get:
+      operationId: TopCampaigns
+      summary: Top Campaigns
+
+  /pause-campaign:
+    post:
+      operationId: PauseCampaign
+      summary: Pause Campaign
+
+  /enable-campaign:
+    post:
+      operationId: EnableCampaign
+      summary: Enable Campaign
+
+  /ad-groups:
+    get:
+      operationId: AdGroups
+      summary: Ad Groups
+
+  /ad-group-search:
+    get:
+      operationId: AdGroupSearch
+      summary: Ad Group Search
+
+  /top-ad-groups:
+    get:
+      operationId: TopAdGroups
+      summary: Top Ad Groups
+
+  /pause-ad-group:
+    post:
+      operationId: PauseAdGroup
+      summary: Pause Ad Group
+
+  /enable-ad-group:
+    post:
+      operationId: EnableAdGroup
+      summary: Enable Ad Group
+
+  /keywords:
+    get:
+      operationId: Keywords
+      summary: Keywords
+
+  /top-keywords:
+    get:
+      operationId: TopKeywords
+      summary: Top Keywords
+
+  /negative-keywords:
+    get:
+      operationId: NegativeKeywords
+      summary: Negative Keywords
+
+  /add-keyword:
+    post:
+      operationId: AddKeyword
+      summary: Add Keyword
+
+  /add-negative-keyword:
+    post:
+      operationId: AddNegativeKeyword
+      summary: Add Negative Keyword
+
+  /remove-negative-keyword:
+    post:
+      operationId: RemoveNegativeKeyword
+      summary: Remove Negative Keyword
+
+  /pause-keyword:
+    post:
+      operationId: PauseKeyword
+      summary: Pause Keyword
+
+  /enable-keyword:
+    post:
+      operationId: EnableKeyword
+      summary: Enable Keyword
+
+  /remove-keyword:
+    post:
+      operationId: RemoveKeyword
+      summary: Remove Keyword
+
+  /ads:
+    get:
+      operationId: Ads
+      summary: Ads
+
+  /pause-ad:
+    post:
+      operationId: PauseAd
+      summary: Pause Ad
+
+  /enable-ad:
+    post:
+      operationId: EnableAd
+      summary: Enable Ad
+
+  /remove-ad:
+    post:
+      operationId: RemoveAd
+      summary: Remove Ad
+
+  /search-terms:
+    get:
+      operationId: SearchTerms
+      summary: Search Terms
+
+  /top-search-terms:
+    get:
+      operationId: TopSearchTerms
+      summary: Top Search Terms
+
+  /search-term-opportunities:
+    get:
+      operationId: SearchTermOpportunities
+      summary: Search Term Opportunities
+
+  /device-performance:
+    get:
+      operationId: DevicePerformance
+      summary: Device Performance
+
+  /device-opportunities:
+    get:
+      operationId: DeviceOpportunities
+      summary: Device Opportunities
+
+  /network-performance:
+    get:
+      operationId: NetworkPerformance
+      summary: Network Performance
+
+  /network-opportunities:
+    get:
+      operationId: NetworkOpportunities
+      summary: Network Opportunities
+
+  /account-insights:
+    get:
+      operationId: AccountInsights
+      summary: Account Insights
+
+  /executive-summary:
+    get:
+      operationId: ExecutiveSummary
+      summary: Executive Summary
+
+  /action-plan:
+    get:
+      operationId: ActionPlan
+      summary: Action Plan
+
+  /optimization-opportunities:
+    get:
+      operationId: OptimizationOpportunities
+      summary: Optimization Opportunities
+
+  /update-budget:
+    post:
+      operationId: UpdateBudget
+      summary: Update Budget
+
+  /preview-budget-update:
+    post:
+      operationId: PreviewBudgetUpdate
+      summary: Preview Budget Update
+
+  /pmax-asset-analysis:
+    get:
+      operationId: PmaxAssetAnalysis
+      summary: PMax Asset Analysis
+
+  /asset-groups:
+    get:
+      operationId: AssetGroups
+      summary: Asset Groups
+
+  /pause-asset-group:
+    post:
+      operationId: PauseAssetGroup
+      summary: Pause Asset Group
+
+  /enable-asset-group:
+    post:
+      operationId: EnableAssetGroup
+      summary: Enable Asset Group
