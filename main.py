@@ -694,7 +694,10 @@ def get_device_performance_data(
 # DEVICE PERFORMANCE
 # ============================================================
 
-@app.get("/device-performance")
+@app.get(
+    "/device-performance",
+    tags=["Reporting"]
+)
 def device_performance(
     customer_id: str = Query(
         ...,
@@ -781,7 +784,10 @@ def device_performance(
 # Analyse en lecture seule, aucune modification automatique
 # ============================================================
 
-@app.get("/device-opportunities")
+@app.get(
+    "/device-opportunities",
+    tags=["Reporting"]
+)
 def device_opportunities(
     customer_id: str = Query(
         ...,
@@ -1562,7 +1568,10 @@ def get_network_performance_data(
 # NETWORK PERFORMANCE
 # ============================================================
 
-@app.get("/network-performance")
+@app.get(
+    "/network-performance",
+    tags=["Reporting"]
+)
 def network_performance(
     customer_id: str = Query(
         ...,
@@ -1636,7 +1645,10 @@ def network_performance(
 # Analyse en lecture seule, aucune modification automatique
 # ============================================================
 
-@app.get("/network-opportunities")
+@app.get(
+    "/network-opportunities",
+    tags=["Reporting"]
+)
 def network_opportunities(
     customer_id: str = Query(
         ...,
@@ -2113,7 +2125,10 @@ def network_opportunities(
  # BUDGET UPDATE
  # ----------------------------------------------------
 
-@app.post("/update-budget")
+@app.post(
+    "/update-budget",
+    tags=["Budgets"]
+)
 def update_budget(
     request: BudgetUpdateRequest
 ):
@@ -2224,7 +2239,10 @@ def update_budget(
 # AD GROUPS
 # ============================================================
 
-@app.get("/ad-groups")
+@app.get(
+    "/ad-groups",
+    tags=["Ad Groups"]
+)
 def ad_groups(
     customer_id: str = Query(
         ...,
@@ -2540,7 +2558,10 @@ def ad_groups(
 # TOP AD GROUPS
 # ============================================================
 
-@app.get("/top-ad-groups")
+@app.get(
+    "/top-ad-groups",
+    tags=["Ad Groups"]
+)
 def top_ad_groups(
     customer_id: str = Query(
         ...,
@@ -2745,7 +2766,10 @@ def top_ad_groups(
 # ----------------------------------------------------
 # PAUSE AD GROUPE
 # ----------------------------------------------------
-@app.post("/pause-ad-group")
+@app.post(
+    "/pause-ad-group",
+    tags=["Ad Groups"]
+)
 def pause_ad_group(
     request: AdGroupActionRequest
 ):
@@ -2903,7 +2927,10 @@ def pause_ad_group(
 # ----------------------------------------------------
 # ENABLE AD GROUPE
 # ----------------------------------------------------
-@app.post("/enable-ad-group")
+@app.post(
+    "/enable-ad-group",
+    tags=["Ad Groups"]
+)
 def enable_ad_group(
     request: AdGroupActionRequest
 ):
@@ -3077,7 +3104,10 @@ def enable_ad_group(
 # ----------------------------------------------------
 # ENABLE CAMPAGNE
 # ----------------------------------------------------
-@app.post("/enable-campaign")
+@app.post(
+    "/enable-campaign",
+    tags=["Campaigns"]
+)
 def enable_campaign(
     request: CampaignActionRequest
 ):
@@ -3208,7 +3238,10 @@ def enable_campaign(
 # ----------------------------------------------------
 # PAUSE CAMPAGNE
 # ----------------------------------------------------
-@app.post("/pause-campaign")
+@app.post(
+    "/pause-campaign",
+    tags=["Campaigns"]
+)
 def pause_campaign(
     request: CampaignActionRequest
 ):
@@ -3304,7 +3337,10 @@ def pause_campaign(
 # CAMPAIGN HEALTH
 # ----------------------------------------------------
 
-@app.get("/campaign-health")
+@app.get(
+    "/campaign-health",
+    tags=["Campaigns"]
+)
 def campaign_health(
     customer_id: str = Query(
         ...,
@@ -3741,7 +3777,10 @@ def campaign_health(
 # PREVIEW BUDGET UPDATE
 # ----------------------------------------------------
 
-@app.post("/preview-budget-update")
+@app.post(
+    "/preview-budget-update",
+    tags=["Budgets"]
+)
 def preview_budget_update(
     request: BudgetUpdateRequest
 ):
@@ -3811,7 +3850,10 @@ def preview_budget_update(
 # Liste complète de la hiérarchie MCC
 # ============================================================
 
-@app.get("/accounts")
+@app.get(
+    "/accounts",
+    tags=["Accounts"]
+)
 def accounts(
     status: str = "ENABLED"
 ):
@@ -3944,7 +3986,10 @@ def accounts(
 # Recherche dans toute la hiérarchie MCC
 # ============================================================
 
-@app.get("/account-search")
+@app.get(
+    "/account-search",
+    tags=["Accounts"]
+)
 def account_search(
     name: str,
     status: str = "ENABLED"
@@ -4089,7 +4134,10 @@ def account_search(
 # ============================================================
 # AD-GROUPE-SEARCH
 # ============================================================
-@app.get("/ad-group-search")
+@app.get(
+    "/ad-group-search",
+    tags=["Ad Groups"]
+)
 def ad_group_search(
     customer_id: str,
     campaign_id: str,
@@ -4180,7 +4228,10 @@ def ad_group_search(
 # ============================================================
 # CAMPAGNES-SEARCH
 # ============================================================
-@app.get("/campaign-search")
+@app.get(
+    "/campaign-search",
+    tags=["Campaigns"]
+)
 def campaign_search(
     customer_id: str,
     name: str
@@ -4261,7 +4312,10 @@ def campaign_search(
 # CAMPAGNES
 # ============================================================
 
-@app.get("/campaigns")
+@app.get(
+    "/campaigns",
+    tags=["Campaigns"]
+)
 def campaigns(
     customer_id: str
 ):
@@ -4311,7 +4365,10 @@ query
 # PERFORMANCE DES CAMPAGNES
 # ============================================================
 
-@app.get("/campaign-performance")
+@app.get(
+    "/campaign-performance",
+    tags=["Campaigns"]
+)
 def campaign_performance(
     customer_id: str = Query(
         ...,
@@ -4614,7 +4671,10 @@ def campaign_performance(
 # TOP CAMPAGNES
 # ============================================================
 
-@app.get("/top-campaigns")
+@app.get(
+    "/top-campaigns",
+    tags=["Campaigns"]
+)
 def top_campaigns(
     customer_id: str = Query(
         ...,
@@ -4690,7 +4750,10 @@ def top_campaigns(
 # ============================================================
 # MOTS-CLÉS
 # ============================================================
-@app.get("/keywords")
+@app.get(
+    "/keywords",
+    tags=["Keywords"]
+)
 def keywords(
     customer_id: str,
     period: str = Query(
@@ -4912,7 +4975,10 @@ def keywords(
 # TOP KEYWORDS
 # ============================================================
 
-@app.get("/top-keywords")
+@app.get(
+    "/top-keywords",
+    tags=["Keywords"]
+)
 def top_keywords(
     customer_id: str = Query(
         ...,
@@ -5237,7 +5303,10 @@ def top_keywords(
 # ADS
 # ============================================================
 
-@app.get("/ads")
+@app.get(
+    "/ads",
+    tags=["Ads"]
+)
 def ads(
     customer_id: str = Query(
         ...,
@@ -5555,7 +5624,10 @@ def ads(
 # SEARCH TERMS
 # ============================================================
 
-@app.get("/search-terms")
+@app.get(
+    "/search-terms",
+    tags=["Search Terms"]
+)
 def search_terms(
     customer_id: str = Query(
         ...,
@@ -5905,7 +5977,10 @@ def search_terms(
 # TOP SEARCH TERMS
 # ============================================================
 
-@app.get("/top-search-terms")
+@app.get(
+    "/top-search-terms",
+    tags=["Search Terms"]
+)
 def top_search_terms(
     customer_id: str = Query(
         ...,
@@ -6115,7 +6190,10 @@ def top_search_terms(
 # AUCUNE modification automatique
 # ============================================================
 
-@app.get("/search-term-opportunities")
+@app.get(
+    "/search-term-opportunities",
+    tags=["Search Terms"]
+)
 def search_term_opportunities(
     customer_id: str = Query(
         ...,
@@ -6698,7 +6776,10 @@ def search_term_opportunities(
 # Niveau campagne et groupes d'annonces
 # ============================================================
 
-@app.get("/negative-keywords")
+@app.get(
+    "/negative-keywords",
+    tags=["Keywords"]
+)
 def negative_keywords(
     customer_id: str = Query(
         ...,
@@ -7053,7 +7134,10 @@ def negative_keywords(
 # Utilise le resource_name exact du critère
 # ============================================================
 
-@app.post("/remove-negative-keyword")
+@app.post(
+    "/remove-negative-keyword",
+    tags=["Keywords"]
+)
 def remove_negative_keyword(
     request: RemoveNegativeKeywordRequest
 ):
@@ -7560,7 +7644,11 @@ def remove_negative_keyword(
 # ----------------------------------------------------
 # ENABLE KEYWORD
 # ----------------------------------------------------
-@app.post("/enable-keyword")
+@app.post(
+    "/enable-keyword",
+    tags=["Keywords"]
+    
+)
 def enable_keyword(
     request: KeywordActionRequest
 ):
@@ -7781,7 +7869,10 @@ def enable_keyword(
 # ----------------------------------------------------
 # PAUSE KEYWORD
 # ----------------------------------------------------
-@app.post("/pause-keyword")
+@app.post(
+    "/pause-keyword",
+    tags=["Keywords"]
+)
 def pause_keyword(
     request: KeywordActionRequest
 ):
@@ -7926,7 +8017,10 @@ def pause_keyword(
 # ----------------------------------------------------
 # REMOVE KEYWORD
 # ----------------------------------------------------
-@app.post("/remove-keyword")
+@app.post(
+    "/remove-keyword",
+    tags=["Keywords"]
+)
 def remove_keyword(
     request: KeywordActionRequest
 ):
@@ -8301,7 +8395,10 @@ def pause_ad(
 # ----------------------------------------------------
 # PAUSE AD
 # ----------------------------------------------------
-@app.post("/pause-ad")
+@app.post(
+    "/pause-ad",
+    tags=["Ads"]
+)
 def pause_ad(
     request: AdActionRequest
 ):
@@ -8442,7 +8539,10 @@ def pause_ad(
 # ----------------------------------------------------
 # REMOVE AD
 # ----------------------------------------------------
-@app.post("/remove-ad")
+@app.post(
+    "/remove-ad",
+    tags=["Ads"]  
+)
 def remove_ad(
     request: AdActionRequest
 ):
@@ -8562,7 +8662,10 @@ def remove_ad(
 # Niveau campagne ou groupe d'annonces
 # ============================================================
 
-@app.post("/add-negative-keyword")
+@app.post(
+    "/add-negative-keyword",
+    tags=["Keywords"]
+)
 def add_negative_keyword(
     request: AddNegativeKeywordRequest
 ):
@@ -9126,7 +9229,10 @@ def add_negative_keyword(
 # Modification protégée par code de confirmation
 # ============================================================
 
-@app.post("/add-keyword")
+@app.post(
+    "/add-keyword",
+    tags=["Keywords"]
+)
 def add_keyword(
     request: AddKeywordRequest
 ):
@@ -9866,7 +9972,10 @@ def _account_insights_health_label(score):
     return "AT_RISK"
 
 
-@app.get("/account-insights")
+@app.get(
+    "/account-insights",
+    tags=["Reporting"]
+)
 def account_insights(
     customer_id: str = Query(
         ...,
@@ -10408,7 +10517,10 @@ def account_insights(
 # Lecture seule
 # ============================================================
 
-@app.get("/executive-summary")
+@app.get(
+    "/executive-summary",
+    tags=["Reporting"]
+)
 def executive_summary(
     customer_id: str = Query(
         ...,
@@ -10852,7 +10964,10 @@ def _action_plan_add_unique(
     return True
 
 
-@app.get("/action-plan")
+@app.get(
+    "/action-plan",
+    tags=["Reporting"]
+)
 def action_plan(
     customer_id: str = Query(
         ...,
@@ -11652,7 +11767,11 @@ def _pmax_make_asset_data(
     }
 
 
-@app.get("/pmax-asset-analysis")
+@app.get(
+    "/pmax-asset-analysis",
+    tags=["PMax"]
+    
+)
 def pmax_asset_analysis(
     customer_id: str = Query(...),
     campaign_id: str = Query(...),
@@ -12091,7 +12210,10 @@ def pmax_asset_analysis(
 # ----------------------------------------------------
 # ASSET GROUPS
 # ----------------------------------------------------
-@app.get("/asset-groups")
+@app.get(
+    "/asset-groups",
+    tags=["PMax"]
+)
 def asset_groups(
     customer_id: str,
     campaign_id: str,
@@ -12187,7 +12309,10 @@ def asset_groups(
 # ----------------------------------------------------
 # PAUSE ASSET GROUP
 # ----------------------------------------------------
-@app.post("/pause-asset-group")
+@app.post(
+    "/pause-asset-group",
+    tags=["PMax"]
+)
 def pause_asset_group(
     request: AssetGroupActionRequest
 ):
@@ -12335,7 +12460,10 @@ def pause_asset_group(
 # ----------------------------------------------------
 # ENABLE ASSET GROUP
 # ----------------------------------------------------
-@app.post("/enable-asset-group")
+@app.post(
+    "/enable-asset-group",
+    tags=["PMax"]
+)
 def enable_asset_group(
     request: AssetGroupActionRequest
 ):
@@ -12485,7 +12613,10 @@ def enable_asset_group(
 # AUCUNE modification automatique
 # ============================================================
 
-@app.get("/optimization-opportunities")
+@app.get(
+    "/optimization-opportunities",
+    tags=["Reporting"]
+)
 def optimization_opportunities(
     customer_id: str = Query(..., description="ID du compte Google Ads"),
     campaign_id: str = Query(..., description="ID Google Ads de la campagne à analyser"),
