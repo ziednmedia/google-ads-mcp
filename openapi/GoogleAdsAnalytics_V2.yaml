@@ -48,85 +48,36 @@ paths:
           description: Success
 
   /campaign-performance:
-  get:
-    operationId: CampaignPerformance
-    summary: Campaign Performance
+    get:
+      operationId: CampaignPerformance
+      summary: Campaign Performance
 
-    parameters:
-      - name: customer_id
-        in: query
-        required: true
-        schema:
-          type: string
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
 
-      - name: period
-        in: query
-        required: false
-        schema:
-          type: string
-          default: LAST_30_DAYS
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            default: LAST_30_DAYS
 
-      - name: start_date
-        in: query
-        required: false
-        schema:
-          type: string
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
 
-      - name: end_date
-        in: query
-        required: false
-        schema:
-          type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
 
-    responses:
-      "200":
-        description: Success
-
-          
-/account-insights:
-  get:
-    operationId: AccountInsights
-    summary: Account Insights
-
-    parameters:
-      - name: customer_id
-        in: query
-        required: true
-        schema:
-          type: string
-
-      - name: campaign_id
-        in: query
-        required: true
-        schema:
-          type: string
-
-      - name: period
-        in: query
-        required: false
-        schema:
-          type: string
-          default: LAST_30_DAYS
-
-      - name: start_date
-        in: query
-        required: false
-        schema:
-          type: string
-
-      - name: end_date
-        in: query
-        required: false
-        schema:
-          type: string
-
-      - name: minimum_clicks_for_ranking
-        in: query
-        required: false
-        schema:
-          type: integer
-          default: 5
-
-    responses:
-      "200":
-        description: Success
+      responses:
+        "200":
+          description: Success
