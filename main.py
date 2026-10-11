@@ -3806,12 +3806,269 @@ def preview_budget_update(
         return {
             "error": str(error)
         }
+# ============================================================
+# ACCOUNTS
+# Liste complète de la hiérarchie MCC
+# ============================================================
 
+@app.get("/accounts")
+def accounts():
+
+    try:
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        manager_id = (
+            os.getenv(
+                "GOOGLE_ADS_LOGIN_CUSTOMER_ID"
+            )
+            .replace("-", "")
+            .strip()
+        )
+
+        query = """
+            SELECT
+                customer_client.id,
+                customer_client.descriptive_name,
+                customer_client.currency_code,
+                customer_client.time_zone,
+                customer_client.manager,
+                customer_client.level,
+                customer_client.status
+            FROM customer_client
+        """
+
+        response = (
+            google_ads_service.search(
+                customer_id=manager_id,
+                query=query
+            )
+        )
+
+        results = []
+        seen = set()
+
+        for row in response:
+
+            customer_id = str(
+                row.customer_client.id
+            )
+
+            if customer_id in seen:
+                continue
+
+            seen.add(customer_id)
+
+            results.append(
+                {
+                    "customer_id":
+                        customer_id,
+
+                    "account_name":
+                        row.customer_client
+                        .descriptive_name,
+
+                    "currency":
+                        row.customer_client
+                        .currency_code,
+
+                    "time_zone":
+                        row.customer_client
+                        .time_zone,
+
+                    "is_manager":
+                        row.customer_client
+                        .manager,
+
+                    "level":
+                        row.customer_client
+                        .level,
+
+                    "status":
+                        enum_name(
+                            row.customer_client
+                            .status
+                        )
+                    if hasattr(
+                        row.customer_client,
+                        "status"
+                    )
+                    else None,
+                }
+            )
+
+        results.sort(
+            key=lambda x:
+                (
+                    x["account_name"]
+                    or ""
+                ).lower()
+        )
+
+        return {
+            "status": "SUCCESS",
+            "manager_account":
+                manager_id,
+
+            "total_accounts":
+                len(results),
+
+            "accounts":
+                results,
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
+
+# ============================================================
+# ACCOUNT SEARCH
+# Recherche dans toute la hiérarchie MCC
+# ============================================================
+
+@app.get("/account-search")
+def account_search(
+    name: str
+):
+
+    try:
+
+        client = get_google_ads_client()
+
+        google_ads_service = client.get_service(
+            "GoogleAdsService"
+        )
+
+        manager_id = (
+            os.getenv(
+                "GOOGLE_ADS_LOGIN_CUSTOMER_ID"
+            )
+            .replace("-", "")
+            .strip()
+        )
+
+        search_value = (
+            name.strip()
+            .lower()
+        )
+
+        query = """
+            SELECT
+                customer_client.id,
+                customer_client.descriptive_name,
+                customer_client.currency_code,
+                customer_client.time_zone,
+                customer_client.manager,
+                customer_client.level,
+                customer_client.status
+            FROM customer_client
+        """
+
+        response = (
+            google_ads_service.search(
+                customer_id=manager_id,
+                query=query
+            )
+        )
+
+        results = []
+        seen = set()
+
+        for row in response:
+
+            account_name = (
+                row.customer_client
+                .descriptive_name
+                or ""
+            )
+
+            if (
+                search_value
+                not in account_name.lower()
+            ):
+                continue
+
+            customer_id = str(
+                row.customer_client.id
+            )
+
+            if customer_id in seen:
+                continue
+
+            seen.add(customer_id)
+
+            results.append(
+                {
+                    "customer_id":
+                        customer_id,
+
+                    "account_name":
+                        account_name,
+
+                    "currency":
+                        row.customer_client
+                        .currency_code,
+
+                    "time_zone":
+                        row.customer_client
+                        .time_zone,
+
+                    "is_manager":
+                        row.customer_client
+                        .manager,
+
+                    "level":
+                        row.customer_client
+                        .level,
+
+                    "status":
+                        enum_name(
+                            row.customer_client
+                            .status
+                        )
+                    if hasattr(
+                        row.customer_client,
+                        "status"
+                    )
+                    else None,
+                }
+            )
+
+        results.sort(
+            key=lambda x:
+                (
+                    x["account_name"]
+                    or ""
+                ).lower()
+        )
+
+        return {
+            "status": "SUCCESS",
+            "search": name,
+            "matches_found":
+                len(results),
+            "matches":
+                results,
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error)
+        }
 # ============================================================
 # ACCOUNTS
 # ============================================================
 
-@app.get("/accounts")
+@app.get("/accounts-v2")
 def accounts():
 
     try:
@@ -3898,7 +4155,7 @@ def accounts():
 # ============================================================
 # ACCOUNT-SEARCH
 # ============================================================
-@app.get("/account-search")
+@app.get("/account-search-v2")
 def account_search(
     name: str
 ):
