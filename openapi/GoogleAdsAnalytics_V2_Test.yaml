@@ -62,25 +62,3 @@ paths:
       responses:
         "200":
           description: Success
-
-  /account-insights:
-  get:
-    operationId: AccountInsights
-    summary: Account Insights
-
-    parameters:
-      - name: customer_id
-        in: query
-        required: true
-        schema:
-          type: string
-
-      - name: campaign_id
-        in: query
-        required: true
-        schema:
-          type: string
-
-    responses:
-      "200":
-        description: Success
