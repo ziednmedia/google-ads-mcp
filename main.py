@@ -8255,7 +8255,10 @@ def remove_keyword(
 # ----------------------------------------------------
 # ENABLE AD
 # ----------------------------------------------------
-@app.post("/enable-ad")
+@app.post(
+    "/enable-ad",
+    tags=["Ads"]
+)
 def pause_ad(
     request: AdActionRequest
 ):
