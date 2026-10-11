@@ -353,33 +353,33 @@ def priority_order(priority: str) -> int:
 # ROUTES DE BASE
 # ============================================================
 
-@app.get("/")
-def root():
-    return {
-        "name": "Google Ads Optimization API",
-        "status": "running",
-        "mode": "READ_ONLY",
-        "automatic_actions": False,
-    }
+#@app.get("/")
+#def root():
+    #return {
+        #"name": "Google Ads Optimization API",
+        #"status": "running",
+        #"mode": "READ_ONLY",
+        #"automatic_actions": False,
+    #}
 
 
-@app.get("/config")
-def config():
-    return {
-        "customer_id": os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
-        "login_customer_id": os.getenv(
-            "GOOGLE_ADS_LOGIN_CUSTOMER_ID"
-        ),
-        "client_id_exists": bool(
-            os.getenv("GOOGLE_ADS_CLIENT_ID")
-        ),
-        "client_secret_exists": bool(
-            os.getenv("GOOGLE_ADS_CLIENT_SECRET")
-        ),
-        "refresh_token_exists": bool(
-            os.getenv("GOOGLE_ADS_REFRESH_TOKEN")
-        ),
-    }
+#@app.get("/config")
+#def config():
+    #return {
+        #"customer_id": os.getenv("GOOGLE_ADS_CUSTOMER_ID"),
+        #"login_customer_id": os.getenv(
+            #"GOOGLE_ADS_LOGIN_CUSTOMER_ID"
+        #),
+        #"client_id_exists": bool(
+            #os.getenv("GOOGLE_ADS_CLIENT_ID")
+        #),
+        #"client_secret_exists": bool(
+            #os.getenv("GOOGLE_ADS_CLIENT_SECRET")
+        #),
+        #"refresh_token_exists": bool(
+            #os.getenv("GOOGLE_ADS_REFRESH_TOKEN")
+        #),
+    #}
  # ----------------------------------------------------     ---------------------------------------------------  --------------------------------------------------- ---------------------------------------------------
 # ============================================================
 # DEVICE PERFORMANCE + DEVICE OPPORTUNITIES
