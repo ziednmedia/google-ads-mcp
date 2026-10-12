@@ -2394,15 +2394,22 @@ async def create_search_campaign(
 @router.post("/test-url")
 async def test_url(file_url: str):
 
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        timeout=60
-    ) as client:
+    try:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=60
+        ) as client:
 
-        response = await client.get(file_url)
+            response = await client.get(file_url)
 
+            return {
+                "status_code": response.status_code,
+                "content_type": response.headers.get("content-type"),
+                "content_length": len(response.content),
+                "final_url": str(response.url)
+            }
+
+    except Exception as e:
         return {
-            "status_code": response.status_code,
-            "content_type": response.headers.get("content-type"),
-            "content_length": len(response.content)
+            "error": str(e)
         }
