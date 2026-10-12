@@ -2391,7 +2391,7 @@ async def create_search_campaign(
 # ============================================================
 # END CREATE
 # ============================================================
-@router.post("/campaigns/search/test-url")
+@router.post("/test-url")
 async def test_url(file_url: str):
 
     async with httpx.AsyncClient(
