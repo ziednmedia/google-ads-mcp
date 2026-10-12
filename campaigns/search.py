@@ -2391,3 +2391,18 @@ async def create_search_campaign(
 # ============================================================
 # END CREATE
 # ============================================================
+@router.post("/campaigns/search/test-url")
+async def test_url(file_url: str):
+
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=60
+    ) as client:
+
+        response = await client.get(file_url)
+
+        return {
+            "status_code": response.status_code,
+            "content_type": response.headers.get("content-type"),
+            "content_length": len(response.content)
+        }
