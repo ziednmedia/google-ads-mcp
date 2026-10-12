@@ -1,0 +1,45 @@
+openapi: 3.0.1
+
+info:
+  title: GoogleAdsSearchBuilder_V2_Test
+  version: 1.0.0
+  description: Test upload Excel file
+
+servers:
+  - url: https://google-ads-mcp-165964728033.europe-west1.run.app
+
+paths:
+  /campaigns/search/test-upload:
+    post:
+      operationId: TestUpload
+      summary: Test Upload
+      description: Upload an Excel file and return filename.
+
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - excel_file
+              properties:
+                excel_file:
+                  type: string
+                  format: binary
+                  description: Excel file
+
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  filename:
+                    type: string
+                  content_type:
+                    type: string
