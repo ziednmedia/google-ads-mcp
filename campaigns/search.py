@@ -595,6 +595,7 @@ async def preview_search_campaign(
 # ============================================================
 # END PREVIEW
 # ============================================================
+
 # ============================================================
 # CREATE
 # ============================================================
@@ -604,6 +605,16 @@ async def preview_search_campaign(
 # HELPERS
 # ============================================================
 
+@router.post("/test-upload")
+async def test_upload(
+    excel_file: UploadFile = File(...)
+):
+    return {
+        "status": "SUCCESS",
+        "filename": excel_file.filename,
+        "content_type": excel_file.content_type
+    }
+    
 def _normalize_customer_id(
     customer_id,
 ):
