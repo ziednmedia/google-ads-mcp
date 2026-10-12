@@ -725,3 +725,245 @@ paths:
             application/json:
               schema:
                 type: object
+
+  /enable-asset-group:
+    post:
+      operationId: EnableAssetGroup
+      summary: Enable Asset Group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - asset_group_id
+              properties:
+                customer_id:
+                  type: string
+                asset_group_id:
+                  type: string
+      responses:
+        "200":
+          description: Asset group enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                
+  /search-terms:
+    get:
+      operationId: SearchTerms
+      summary: Search Terms
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: campaign_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: ad_group_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Search terms list
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /top-search-terms:
+    get:
+      operationId: TopSearchTerms
+      summary: Top Search Terms
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Top search terms
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /negative-search-terms:
+    get:
+      operationId: NegativeSearchTerms
+      summary: Negative Search Terms Opportunities
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: min_clicks
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Negative keyword opportunities
+          content:
+            application/json:
+              schema:
+                type: object
+  /device-performance:
+    get:
+      operationId: DevicePerformance
+      summary: Device Performance
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: campaign_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Device performance report
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /device-opportunities:
+    get:
+      operationId: DeviceOpportunities
+      summary: Device Opportunities
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: min_clicks
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Device optimization opportunities
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /network-performance:
+    get:
+      operationId: NetworkPerformance
+      summary: Network Performance
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: campaign_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Network performance report
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /network-opportunities:
+    get:
+      operationId: NetworkOpportunities
+      summary: Network Opportunities
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: min_clicks
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Network optimization opportunities
+          content:
+            application/json:
+              schema:
+                type: object
+  /action-plan:
+    get:
+      operationId: ActionPlan
+      summary: Action Plan
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recommended optimization action plan
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /executive-summary:
+    get:
+      operationId: ExecutiveSummary
+      summary: Executive Summary
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Executive account summary
+          content:
+            application/json:
+              schema:
+                type: object
