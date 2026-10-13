@@ -1,0 +1,1034 @@
+openapi: 3.0.1
+ 
+info:
+  title: GoogleAdsAnalytics_V3
+  version: 2.0.0
+ 
+servers:
+  - url: https://google-ads-mcp-165964728033.europe-west1.run.app
+ 
+paths:
+ 
+  # ---------- Accounts ----------
+  /accounts:
+    get:
+      operationId: Accounts
+      summary: Accounts
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ENABLED
+      responses:
+        "200":
+          description: Success
+ 
+  /account-search:
+    get:
+      operationId: AccountSearch
+      summary: Account Search
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ENABLED
+      responses:
+        "200":
+          description: Success
+ 
+  # ---------- Campaigns ----------
+  /campaigns:
+    get:
+      operationId: Campaigns
+      summary: Campaigns
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+      responses:
+        "200":
+          description: Success
+ 
+  /campaign-search:
+    get:
+      operationId: CampaignSearch
+      summary: Campaign Search
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+ 
+  /campaign-performance:
+    get:
+      operationId: CampaignPerformance
+      summary: Campaign Performance
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Success
+ 
+  /campaign-health:
+    get:
+      operationId: CampaignHealth
+      summary: Campaign Health
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Success
+ 
+  /top-campaigns:
+    get:
+      operationId: TopCampaigns
+      summary: Top Campaigns
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Success
+ 
+  /enable-campaign:
+    post:
+      operationId: EnableCampaign
+      summary: Enable Campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignActionRequest"
+      responses:
+        "200":
+          description: Campaign enabled
+ 
+  /pause-campaign:
+    post:
+      operationId: PauseCampaign
+      summary: Pause Campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignActionRequest"
+      responses:
+        "200":
+          description: Campaign paused
+ 
+  # ---------- Ad Groups ----------
+  /ad-groups:
+    get:
+      operationId: AdGroups
+      summary: Ad Groups
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Success
+ 
+  /ad-group-search:
+    get:
+      operationId: AdGroupSearch
+      summary: Ad Group Search
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+ 
+  /top-ad-groups:
+    get:
+      operationId: TopAdGroups
+      summary: Top Ad Groups
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Limit100"
+        - $ref: "#/components/parameters/RankingBy"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Success
+ 
+  /pause-ad-group:
+    post:
+      operationId: PauseAdGroup
+      summary: Pause Ad Group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdGroupActionRequest"
+      responses:
+        "200":
+          description: Success
+ 
+  /enable-ad-group:
+    post:
+      operationId: EnableAdGroup
+      summary: Enable Ad Group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdGroupActionRequest"
+      responses:
+        "200":
+          description: Success
+ 
+  # ---------- Keywords ----------
+  /keywords:
+    get:
+      operationId: Keywords
+      summary: Keywords
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Success
+ 
+  /top-keywords:
+    get:
+      operationId: TopKeywords
+      summary: Top Keywords
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/Limit100"
+        - $ref: "#/components/parameters/RankingBy"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Success
+ 
+  /negative-keywords:
+    get:
+      operationId: NegativeKeywords
+      summary: Negative Keywords
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+      responses:
+        "200":
+          description: Success
+ 
+  /add-keyword:
+    post:
+      operationId: AddKeyword
+      summary: Add Keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - ad_group_id
+                - keyword
+                - confirmation_code
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                ad_group_id:
+                  type: string
+                keyword:
+                  type: string
+                match_type:
+                  type: string
+                  enum:
+                    - BROAD
+                    - PHRASE
+                    - EXACT
+                  default: EXACT
+                confirmation_code:
+                  type: string
+      responses:
+        "200":
+          description: Success
+ 
+  /add-negative-keyword:
+    post:
+      operationId: AddNegativeKeyword
+      summary: Add Negative Keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - keyword
+                - confirmation_code
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                keyword:
+                  type: string
+                match_type:
+                  type: string
+                  enum:
+                    - BROAD
+                    - PHRASE
+                    - EXACT
+                  default: EXACT
+                level:
+                  type: string
+                  enum:
+                    - CAMPAIGN
+                    - AD_GROUP
+                  default: CAMPAIGN
+                ad_group_id:
+                  type: string
+                  description: Required only when level is AD_GROUP
+                confirmation_code:
+                  type: string
+      responses:
+        "200":
+          description: Success
+ 
+  /remove-negative-keyword:
+    post:
+      operationId: RemoveNegativeKeyword
+      summary: Remove Negative Keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - level
+                - resource_name
+                - confirmation_code
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                level:
+                  type: string
+                  enum:
+                    - CAMPAIGN
+                    - AD_GROUP
+                resource_name:
+                  type: string
+                  description: Resource name of the negative keyword, as returned by /negative-keywords
+                confirmation_code:
+                  type: string
+      responses:
+        "200":
+          description: Success
+ 
+  /pause-keyword:
+    post:
+      operationId: PauseKeyword
+      summary: Pause Keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordActionRequest"
+      responses:
+        "200":
+          description: Success
+ 
+  /enable-keyword:
+    post:
+      operationId: EnableKeyword
+      summary: Enable Keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordActionRequest"
+      responses:
+        "200":
+          description: Success
+ 
+  /remove-keyword:
+    post:
+      operationId: RemoveKeyword
+      summary: Remove Keyword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeywordActionRequest"
+      responses:
+        "200":
+          description: Success
+ 
+  # ---------- Ads ----------
+  /ads:
+    get:
+      operationId: Ads
+      summary: Ads
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Ads list
+ 
+  /pause-ad:
+    post:
+      operationId: PauseAd
+      summary: Pause Ad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdActionRequest"
+      responses:
+        "200":
+          description: Ad paused
+ 
+  /enable-ad:
+    post:
+      operationId: EnableAd
+      summary: Enable Ad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdActionRequest"
+      responses:
+        "200":
+          description: Ad enabled
+ 
+  /remove-ad:
+    post:
+      operationId: RemoveAd
+      summary: Remove Ad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdActionRequest"
+      responses:
+        "200":
+          description: Ad removed
+ 
+  # ---------- PMax ----------
+  /pmax-asset-analysis:
+    get:
+      operationId: PmaxAssetAnalysis
+      summary: Pmax Asset Analysis
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+        - name: minimum_impressions_for_evaluation
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: minimum_conversions_for_winner
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+            default: 3.0
+      responses:
+        "200":
+          description: Success
+ 
+  /asset-groups:
+    get:
+      operationId: AssetGroups
+      summary: Asset Groups
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+      responses:
+        "200":
+          description: Asset groups list
+ 
+  /pause-asset-group:
+    post:
+      operationId: PauseAssetGroup
+      summary: Pause Asset Group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetGroupActionRequest"
+      responses:
+        "200":
+          description: Asset group paused
+ 
+  /enable-asset-group:
+    post:
+      operationId: EnableAssetGroup
+      summary: Enable Asset Group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetGroupActionRequest"
+      responses:
+        "200":
+          description: Asset group enabled
+ 
+  # ---------- Search Terms ----------
+  /search-terms:
+    get:
+      operationId: SearchTerms
+      summary: Search Terms
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Search terms list
+ 
+  /top-search-terms:
+    get:
+      operationId: TopSearchTerms
+      summary: Top Search Terms
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Limit100"
+        - $ref: "#/components/parameters/RankingBy"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Top search terms
+ 
+  /search-term-opportunities:
+    get:
+      operationId: SearchTermOpportunities
+      summary: Search Term Opportunities
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+        - name: minimum_clicks
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 5
+        - name: minimum_cost
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+            default: 10.0
+        - name: high_cpa_multiplier
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 1.0
+            maximum: 10.0
+            default: 1.5
+        - name: minimum_conversions_for_new_keyword
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0.01
+            default: 1.0
+        - name: minimum_impressions_for_low_ctr
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: low_ctr_threshold
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+            default: 2.0
+      responses:
+        "200":
+          description: Search term opportunities
+ 
+  # ---------- Reporting ----------
+  /device-performance:
+    get:
+      operationId: DevicePerformance
+      summary: Device Performance
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Device performance report
+ 
+  /device-opportunities:
+    get:
+      operationId: DeviceOpportunities
+      summary: Device Opportunities
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+        - $ref: "#/components/parameters/MinimumClicks"
+        - $ref: "#/components/parameters/MinimumCost"
+        - $ref: "#/components/parameters/MinimumConversionsForCpa"
+        - $ref: "#/components/parameters/HighCpaMultiplier"
+        - $ref: "#/components/parameters/LowRoasMultiplier"
+        - $ref: "#/components/parameters/WinnerRoasMultiplier"
+      responses:
+        "200":
+          description: Device optimization opportunities
+ 
+  /network-performance:
+    get:
+      operationId: NetworkPerformance
+      summary: Network Performance
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Network performance report
+ 
+  /network-opportunities:
+    get:
+      operationId: NetworkOpportunities
+      summary: Network Opportunities
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+        - $ref: "#/components/parameters/MinimumClicks"
+        - $ref: "#/components/parameters/MinimumCost"
+        - $ref: "#/components/parameters/MinimumConversionsForCpa"
+        - name: minimum_conversions_for_roas
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0.01
+            default: 5.0
+        - $ref: "#/components/parameters/HighCpaMultiplier"
+        - $ref: "#/components/parameters/LowRoasMultiplier"
+        - $ref: "#/components/parameters/WinnerRoasMultiplier"
+      responses:
+        "200":
+          description: Network optimization opportunities
+ 
+  /account-insights:
+    get:
+      operationId: AccountInsights
+      summary: Account Insights
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+        - name: minimum_clicks_for_ranking
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 5
+      responses:
+        "200":
+          description: Success
+ 
+  /executive-summary:
+    get:
+      operationId: ExecutiveSummary
+      summary: Executive Summary
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Executive account summary
+ 
+  /action-plan:
+    get:
+      operationId: ActionPlan
+      summary: Action Plan
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+        - name: include_monitoring
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: Recommended optimization action plan
+ 
+  /optimization-opportunities:
+    get:
+      operationId: OptimizationOpportunities
+      summary: Optimization Opportunities
+      parameters:
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/CampaignId"
+        - $ref: "#/components/parameters/Period"
+        - $ref: "#/components/parameters/StartDate"
+        - $ref: "#/components/parameters/EndDate"
+      responses:
+        "200":
+          description: Optimization opportunities
+ 
+  # ---------- Budgets ----------
+  /update-budget:
+    post:
+      operationId: UpdateBudget
+      summary: Update Campaign Budget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudgetUpdateRequest"
+      responses:
+        "200":
+          description: Budget updated
+ 
+  /preview-budget-update:
+    post:
+      operationId: PreviewBudgetUpdate
+      summary: Preview Budget Update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BudgetUpdateRequest"
+      responses:
+        "200":
+          description: Budget update preview
+ 
+components:
+ 
+  parameters:
+    CustomerId:
+      name: customer_id
+      in: query
+      required: true
+      description: Google Ads account ID
+      schema:
+        type: string
+    CampaignId:
+      name: campaign_id
+      in: query
+      required: true
+      description: Google Ads campaign ID
+      schema:
+        type: string
+    Period:
+      name: period
+      in: query
+      required: false
+      description: Predefined Google Ads date range
+      schema:
+        type: string
+        default: LAST_30_DAYS
+    StartDate:
+      name: start_date
+      in: query
+      required: false
+      description: Custom start date (YYYY-MM-DD)
+      schema:
+        type: string
+    EndDate:
+      name: end_date
+      in: query
+      required: false
+      description: Custom end date (YYYY-MM-DD)
+      schema:
+        type: string
+    Limit100:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    RankingBy:
+      name: ranking_by
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+          - ROAS
+          - CPA
+          - CONVERSIONS
+          - CONVERSION_VALUE
+          - CTR
+          - CLICKS
+          - COST
+          - IMPRESSIONS
+          - CONVERSION_RATE
+          - AVG_CPC
+        default: ROAS
+    MinimumClicks:
+      name: minimum_clicks
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 10
+    MinimumCost:
+      name: minimum_cost
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 0
+        default: 25.0
+    MinimumConversionsForCpa:
+      name: minimum_conversions_for_cpa
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 0.01
+        default: 5.0
+    HighCpaMultiplier:
+      name: high_cpa_multiplier
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 1.0
+        maximum: 10.0
+        default: 1.5
+    LowRoasMultiplier:
+      name: low_roas_multiplier
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 0
+        maximum: 1.0
+        default: 0.5
+    WinnerRoasMultiplier:
+      name: winner_roas_multiplier
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 1.0
+        maximum: 10.0
+        default: 1.25
+ 
+  schemas:
+    CampaignActionRequest:
+      type: object
+      required:
+        - customer_id
+        - campaign_id
+        - confirmation_code
+      properties:
+        customer_id:
+          type: string
+        campaign_id:
+          type: string
+        confirmation_code:
+          type: string
+ 
+    AdGroupActionRequest:
+      type: object
+      required:
+        - customer_id
+        - campaign_id
+        - ad_group_id
+        - confirmation_code
+      properties:
+        customer_id:
+          type: string
+        campaign_id:
+          type: string
+        ad_group_id:
+          type: string
+        confirmation_code:
+          type: string
+ 
+    KeywordActionRequest:
+      type: object
+      required:
+        - customer_id
+        - campaign_id
+        - ad_group_id
+        - criterion_id
+        - confirmation_code
+      properties:
+        customer_id:
+          type: string
+        campaign_id:
+          type: string
+        ad_group_id:
+          type: string
+        criterion_id:
+          type: string
+        confirmation_code:
+          type: string
+ 
+    AdActionRequest:
+      type: object
+      required:
+        - customer_id
+        - campaign_id
+        - ad_group_id
+        - ad_id
+        - confirmation_code
+      properties:
+        customer_id:
+          type: string
+        campaign_id:
+          type: string
+        ad_group_id:
+          type: string
+        ad_id:
+          type: string
+        confirmation_code:
+          type: string
+ 
+    AssetGroupActionRequest:
+      type: object
+      required:
+        - customer_id
+        - campaign_id
+        - asset_group_id
+        - confirmation_code
+      properties:
+        customer_id:
+          type: string
+        campaign_id:
+          type: string
+        asset_group_id:
+          type: string
+        confirmation_code:
+          type: string
+ 
+    BudgetUpdateRequest:
+      type: object
+      required:
+        - customer_id
+        - campaign_id
+        - new_budget
+        - confirmation_code
+      properties:
+        customer_id:
+          type: string
+        campaign_id:
+          type: string
+        new_budget:
+          type: number
+        confirmation_code:
+          type: string
