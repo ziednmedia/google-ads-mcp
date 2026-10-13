@@ -1058,3 +1058,65 @@ paths:
             application/json:
               schema:
                 type: object
+  /update-budget:
+    post:
+      operationId: UpdateBudget
+      summary: Update Campaign Budget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - new_budget
+                - confirmation_code
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                new_budget:
+                  type: number
+                  format: float
+                confirmation_code:
+                  type: string
+      responses:
+        "200":
+          description: Budget updated
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /preview-budget-update:
+    post:
+      operationId: PreviewBudgetUpdate
+      summary: Preview Budget Update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - new_budget
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                new_budget:
+                  type: number
+                  format: float
+      responses:
+        "200":
+          description: Budget update preview
+          content:
+            application/json:
+              schema:
+                type: object
