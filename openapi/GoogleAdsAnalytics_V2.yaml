@@ -500,7 +500,33 @@ paths:
     post:
       operationId: AddKeyword
       summary: Add Keyword
-
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - ad_group_id
+                - keyword
+                - match_type
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                ad_group_id:
+                  type: string
+                keyword:
+                  type: string
+                match_type:
+                  type: string
+                  enum:
+                    - BROAD
+                    - PHRASE
+                    - EXACT
       responses:
         "200":
           description: Success
@@ -509,7 +535,20 @@ paths:
     post:
       operationId: AddNegativeKeyword
       summary: Add Negative Keyword
-
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - keyword
+              properties:
+                customer_id:
+                  type: string
+                keyword:
+                  type: string
       responses:
         "200":
           description: Success
@@ -518,7 +557,20 @@ paths:
     post:
       operationId: RemoveNegativeKeyword
       summary: Remove Negative Keyword
-
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - criterion_id
+              properties:
+                customer_id:
+                  type: string
+                criterion_id:
+                  type: string
       responses:
         "200":
           description: Success
@@ -527,7 +579,20 @@ paths:
     post:
       operationId: PauseKeyword
       summary: Pause Keyword
-
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - criterion_id
+              properties:
+                customer_id:
+                  type: string
+                criterion_id:
+                  type: string
       responses:
         "200":
           description: Success
@@ -536,7 +601,20 @@ paths:
     post:
       operationId: EnableKeyword
       summary: Enable Keyword
-
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - criterion_id
+              properties:
+                customer_id:
+                  type: string
+                criterion_id:
+                  type: string
       responses:
         "200":
           description: Success
@@ -545,7 +623,20 @@ paths:
     post:
       operationId: RemoveKeyword
       summary: Remove Keyword
-
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - criterion_id
+              properties:
+                customer_id:
+                  type: string
+                criterion_id:
+                  type: string
       responses:
         "200":
           description: Success
