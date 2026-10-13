@@ -1120,3 +1120,52 @@ paths:
             application/json:
               schema:
                 type: object
+  /enable-campaign:
+    post:
+      operationId: EnableCampaign
+      summary: Enable Campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - confirmation_code
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                confirmation_code:
+                  type: string
+      responses:
+        "200":
+          description: Campaign enabled
+
+  /pause-campaign:
+    post:
+      operationId: PauseCampaign
+      summary: Pause Campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - campaign_id
+                - confirmation_code
+              properties:
+                customer_id:
+                  type: string
+                campaign_id:
+                  type: string
+                confirmation_code:
+                  type: string
+      responses:
+        "200":
+          description: Campaign paused
