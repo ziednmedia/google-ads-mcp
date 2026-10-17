@@ -9,6 +9,9 @@ from google.ads.googleads.client import GoogleAdsClient
 from campaigns.search import (
     router as search_router,
 )
+from campaigns.bidding import (
+    get_bidding_strategy_details,
+)
         
 class BudgetUpdateRequest(
         BaseModel
@@ -14299,6 +14302,56 @@ def optimization_opportunities(
             "error": str(error),
         }
 
+# ============================================================
+# BIDDING STRATEGY DETAILS
+# ============================================================
+@app.get(
+    "/bidding-strategy-details",
+    tags=["Bidding"]
+)
+def bidding_strategy_details(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads"
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne"
+    ),
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        client = get_google_ads_client()
+
+        data = get_bidding_strategy_details(
+            client=client,
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+        )
+
+        return {
+            "status": "SUCCESS",
+            "customer_id": customer_id,
+            "campaign": data,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
 
 
 
