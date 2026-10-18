@@ -3818,6 +3818,13 @@ def update_bidding_strategy(
         )
     )
 
+    print(
+        {
+            "strategy_type": strategy_type,
+            "target_cpa": target_cpa,
+            "update_paths": update_paths,
+        }
+    )
     # --------------------------------------------------------
     # MUTATION GOOGLE ADS
     # --------------------------------------------------------
