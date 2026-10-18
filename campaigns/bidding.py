@@ -1,11 +1,14 @@
-import hashlib
+import os
+import hmac
 import json
+import hashlib
 from typing import Dict, Any
 from google.ads.googleads.client import GoogleAdsClient
 
 from models.bidding_models import (
     AnalyzeStrategyChangeRequest,
     PreviewBiddingStrategyUpdateRequest,
+    UpdateBiddingStrategyRequest,
     BiddingStrategyType,
     BiddingTargetAction,
 )
@@ -3143,4 +3146,699 @@ def preview_bidding_strategy_update(
         ),
 
         "next_action": next_action,
+    }
+# ============================================================
+# verify_bidding_confirmation_code
+# ============================================================
+def verify_bidding_confirmation_code(
+    provided_code: str,
+):
+    """
+    Vérifie le code fourni par l'utilisateur contre
+    CONFIRMATION_CODE stocké dans Google Cloud.
+
+    La valeur attendue n'est jamais retournée,
+    journalisée ou exposée par l'API.
+    """
+
+    expected_code = os.getenv(
+        "CONFIRMATION_CODE"
+    )
+
+    if not expected_code:
+
+        raise ValueError(
+            "La variable CONFIRMATION_CODE "
+            "n'est pas configurée dans Google Cloud."
+        )
+
+    provided_value = (
+        provided_code or ""
+    ).strip()
+
+    expected_value = (
+        expected_code or ""
+    ).strip()
+
+    if not hmac.compare_digest(
+        provided_value,
+        expected_value,
+    ):
+        raise PermissionError(
+            "Code de confirmation invalide."
+        )
+# ============================================================
+# UPDATE BIDDING STRATEGY
+# ============================================================
+def update_bidding_strategy(
+    client: GoogleAdsClient,
+    request: UpdateBiddingStrategyRequest,
+):
+    """
+    Met à jour réellement la stratégie d'enchères
+    d'une campagne Google Ads.
+
+    Sécurité et workflow :
+
+    1. Vérifie CONFIRMATION_CODE.
+    2. Relance la prévisualisation.
+    3. Vérifie le preview_id.
+    4. Refuse toute demande incompatible.
+    5. Applique la mutation Google Ads.
+    6. Relit la campagne.
+    7. Retourne la configuration vérifiée.
+
+    Le code de confirmation n'est jamais retourné.
+    """
+
+    # --------------------------------------------------------
+    # NORMALISATION
+    # --------------------------------------------------------
+
+    customer_id = (
+        str(request.customer_id)
+        .replace("-", "")
+        .strip()
+    )
+
+    campaign_id = (
+        str(request.campaign_id)
+        .replace("-", "")
+        .strip()
+    )
+
+    if not customer_id.isdigit():
+        raise ValueError(
+            "Le customer_id doit contenir "
+            "uniquement des chiffres."
+        )
+
+    if not campaign_id.isdigit():
+        raise ValueError(
+            "Le campaign_id doit contenir "
+            "uniquement des chiffres."
+        )
+
+    # --------------------------------------------------------
+    # CONFIRMATION CODE
+    # --------------------------------------------------------
+
+    verify_bidding_confirmation_code(
+        request.confirmation_code
+    )
+
+    # --------------------------------------------------------
+    # NOUVELLE PRÉVISUALISATION
+    # --------------------------------------------------------
+
+    preview_request = (
+        PreviewBiddingStrategyUpdateRequest(
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=request.period,
+            requested_strategy_type=(
+                request.requested_strategy_type
+            ),
+            target_action=(
+                request.target_action
+            ),
+            target_cpa=request.target_cpa,
+            target_roas_percent=(
+                request.target_roas_percent
+            ),
+            cpc_bid_ceiling=(
+                request.cpc_bid_ceiling
+            ),
+            change_percent=(
+                request.change_percent
+            ),
+            target_impression_share_percent=(
+                request
+                .target_impression_share_percent
+            ),
+            target_impression_location=(
+                request
+                .target_impression_location
+            ),
+            reason=request.reason,
+        )
+    )
+
+    current_preview = (
+        preview_bidding_strategy_update(
+            client=client,
+            request=preview_request,
+        )
+    )
+
+    # --------------------------------------------------------
+    # VALIDATION DE LA PRÉVISUALISATION
+    # --------------------------------------------------------
+
+    if not current_preview.get(
+        "compatible",
+        False,
+    ):
+        raise ValueError(
+            "La modification n'est plus compatible "
+            "avec la configuration actuelle."
+        )
+
+    if (
+        current_preview.get(
+            "preview_status"
+        )
+        != "READY_FOR_CONFIRMATION"
+    ):
+        raise ValueError(
+            "La prévisualisation n'est pas prête "
+            "pour l'exécution."
+        )
+
+    if (
+        current_preview.get(
+            "preview_id"
+        )
+        != request.preview_id
+    ):
+        raise ValueError(
+            "La configuration de la campagne a changé "
+            "ou la demande ne correspond plus à la "
+            "prévisualisation confirmée. Relancez la "
+            "prévisualisation avant de continuer."
+        )
+
+    if (
+        current_preview.get(
+            "changes_count",
+            0,
+        )
+        <= 0
+    ):
+        raise ValueError(
+            "Aucune modification n'est nécessaire."
+        )
+
+    # --------------------------------------------------------
+    # CONFIGURATIONS AVANT / APRÈS
+    # --------------------------------------------------------
+
+    previous_configuration = (
+        current_preview[
+            "current_configuration"
+        ]
+    )
+
+    proposed_configuration = (
+        current_preview[
+            "proposed_configuration"
+        ]
+    )
+
+    strategy_type = (
+        proposed_configuration[
+            "strategy_type"
+        ]
+    )
+
+    target_action = (
+        proposed_configuration[
+            "target_action"
+        ]
+    )
+
+    target_cpa = (
+        proposed_configuration.get(
+            "target_cpa"
+        )
+    )
+
+    target_roas_percent = (
+        proposed_configuration.get(
+            "target_roas_percent"
+        )
+    )
+
+    cpc_bid_ceiling = (
+        proposed_configuration.get(
+            "cpc_bid_ceiling"
+        )
+    )
+
+    impression_share_percent = (
+        proposed_configuration.get(
+            "target_impression_share_percent"
+        )
+    )
+
+    impression_location = (
+        proposed_configuration.get(
+            "target_impression_location"
+        )
+    )
+
+    # --------------------------------------------------------
+    # OBJETS GOOGLE ADS
+    # --------------------------------------------------------
+
+    campaign_service = client.get_service(
+        "CampaignService"
+    )
+
+    campaign_operation = client.get_type(
+        "CampaignOperation"
+    )
+
+    campaign = (
+        campaign_operation.update
+    )
+
+    campaign.resource_name = (
+        campaign_service.campaign_path(
+            customer_id,
+            campaign_id,
+        )
+    )
+
+    update_paths = []
+
+    # --------------------------------------------------------
+    # MAXIMISER LES CONVERSIONS / tCPA
+    # --------------------------------------------------------
+
+    if (
+        strategy_type
+        == "MAXIMIZE_CONVERSIONS"
+    ):
+        maximize_conversions = (
+            client.get_type(
+                "MaximizeConversions"
+            )
+        )
+
+        if target_cpa is not None:
+
+            maximize_conversions.target_cpa_micros = int(
+                round(
+                    float(target_cpa)
+                    * 1_000_000
+                )
+            )
+
+        campaign.maximize_conversions = (
+            maximize_conversions
+        )
+
+        update_paths.append(
+            "maximize_conversions"
+        )
+
+        update_paths.append(
+            "maximize_conversions."
+            "target_cpa_micros"
+        )
+
+    # --------------------------------------------------------
+    # MAXIMISER LA VALEUR / tROAS
+    # --------------------------------------------------------
+
+    elif (
+        strategy_type
+        == "MAXIMIZE_CONVERSION_VALUE"
+    ):
+        maximize_conversion_value = (
+            client.get_type(
+                "MaximizeConversionValue"
+            )
+        )
+
+        if target_roas_percent is not None:
+
+            maximize_conversion_value.target_roas = (
+                round(
+                    float(
+                        target_roas_percent
+                    )
+                    / 100,
+                    6,
+                )
+            )
+
+        campaign.maximize_conversion_value = (
+            maximize_conversion_value
+        )
+
+        update_paths.append(
+            "maximize_conversion_value"
+        )
+
+        update_paths.append(
+            "maximize_conversion_value.target_roas"
+        )
+
+    # --------------------------------------------------------
+    # MAXIMISER LES CLICS
+    # Google Ads expose cette stratégie via TARGET_SPEND.
+    # --------------------------------------------------------
+
+    elif strategy_type == "MAXIMIZE_CLICKS":
+
+        target_spend = client.get_type(
+            "TargetSpend"
+        )
+
+        if cpc_bid_ceiling is not None:
+
+            target_spend.cpc_bid_ceiling_micros = int(
+                round(
+                    float(cpc_bid_ceiling)
+                    * 1_000_000
+                )
+            )
+
+        campaign.target_spend = (
+            target_spend
+        )
+
+        update_paths.append(
+            "target_spend"
+        )
+
+        update_paths.append(
+            "target_spend."
+            "cpc_bid_ceiling_micros"
+        )
+
+    # --------------------------------------------------------
+    # CPC MANUEL
+    # --------------------------------------------------------
+
+    elif strategy_type == "MANUAL_CPC":
+
+        manual_cpc = client.get_type(
+            "ManualCpc"
+        )
+
+        manual_cpc.enhanced_cpc_enabled = False
+
+        campaign.manual_cpc = (
+            manual_cpc
+        )
+
+        update_paths.append(
+            "manual_cpc"
+        )
+
+        update_paths.append(
+            "manual_cpc."
+            "enhanced_cpc_enabled"
+        )
+
+    # --------------------------------------------------------
+    # TAUX D'IMPRESSIONS CIBLE
+    # --------------------------------------------------------
+
+    elif (
+        strategy_type
+        == "TARGET_IMPRESSION_SHARE"
+    ):
+        if impression_share_percent is None:
+            raise ValueError(
+                "La part d'impressions cible "
+                "est obligatoire."
+            )
+
+        if impression_location is None:
+            raise ValueError(
+                "L'emplacement cible est obligatoire."
+            )
+
+        if cpc_bid_ceiling is None:
+            raise ValueError(
+                "La limite CPC maximale est "
+                "obligatoire."
+            )
+
+        target_impression_share = (
+            client.get_type(
+                "TargetImpressionShare"
+            )
+        )
+
+        target_impression_share.location_fraction_micros = int(
+            round(
+                (
+                    float(
+                        impression_share_percent
+                    )
+                    / 100
+                )
+                * 1_000_000
+            )
+        )
+
+        target_impression_share.cpc_bid_ceiling_micros = int(
+            round(
+                float(cpc_bid_ceiling)
+                * 1_000_000
+            )
+        )
+
+        if (
+            impression_location
+            == "ANYWHERE_ON_PAGE"
+        ):
+            target_impression_share.location = (
+                client.enums
+                .TargetImpressionShareLocationEnum
+                .ANYWHERE_ON_PAGE
+            )
+
+        elif (
+            impression_location
+            == "TOP_OF_PAGE"
+        ):
+            target_impression_share.location = (
+                client.enums
+                .TargetImpressionShareLocationEnum
+                .TOP_OF_PAGE
+            )
+
+        elif (
+            impression_location
+            == "ABSOLUTE_TOP_OF_PAGE"
+        ):
+            target_impression_share.location = (
+                client.enums
+                .TargetImpressionShareLocationEnum
+                .ABSOLUTE_TOP_OF_PAGE
+            )
+
+        else:
+            raise ValueError(
+                "Emplacement Taux d'impressions "
+                "cible non reconnu."
+            )
+
+        campaign.target_impression_share = (
+            target_impression_share
+        )
+
+        update_paths.append(
+            "target_impression_share"
+        )
+
+        update_paths.append(
+            "target_impression_share."
+            "location"
+        )
+
+        update_paths.append(
+            "target_impression_share."
+            "location_fraction_micros"
+        )
+
+        update_paths.append(
+            "target_impression_share."
+            "cpc_bid_ceiling_micros"
+        )
+
+    else:
+        raise ValueError(
+            "La stratégie demandée n'est pas "
+            "prise en charge par la mutation."
+        )
+
+    # --------------------------------------------------------
+    # UPDATE MASK
+    # --------------------------------------------------------
+
+    campaign_operation.update_mask.paths.extend(
+        list(
+            dict.fromkeys(
+                update_paths
+            )
+        )
+    )
+
+    # --------------------------------------------------------
+    # MUTATION GOOGLE ADS
+    # --------------------------------------------------------
+
+    response = (
+        campaign_service.mutate_campaigns(
+            customer_id=customer_id,
+            operations=[
+                campaign_operation
+            ],
+        )
+    )
+
+    if not response.results:
+        raise ValueError(
+            "Google Ads n'a retourné aucune "
+            "ressource modifiée."
+        )
+
+    resource_name = (
+        response.results[0]
+        .resource_name
+    )
+
+    # --------------------------------------------------------
+    # RELECTURE APRÈS MUTATION
+    # --------------------------------------------------------
+
+    verified_configuration = (
+        get_bidding_strategy_details(
+            client=client,
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+        )
+    )
+
+    # --------------------------------------------------------
+    # VÉRIFICATION DE LA STRATÉGIE ENREGISTRÉE
+    # --------------------------------------------------------
+
+    verified_strategy_type = (
+        verified_configuration[
+            "strategy_type"
+        ]
+    )
+
+    expected_google_strategy_type = (
+        strategy_type
+    )
+
+    # La stratégie Maximiser les clics peut être
+    # retournée par Google Ads sous TARGET_SPEND.
+    if strategy_type == "MAXIMIZE_CLICKS":
+
+        expected_google_strategy_type = (
+            "TARGET_SPEND"
+        )
+
+    strategy_verified = (
+        verified_strategy_type
+        == expected_google_strategy_type
+    )
+
+    verification_warnings = []
+
+    if not strategy_verified:
+
+        verification_warnings.append(
+            {
+                "code": (
+                    "STRATEGY_VERIFICATION_MISMATCH"
+                ),
+                "message": (
+                    "La stratégie retournée après "
+                    "mutation ne correspond pas "
+                    "exactement à la stratégie attendue."
+                ),
+                "expected": (
+                    expected_google_strategy_type
+                ),
+                "actual": (
+                    verified_strategy_type
+                ),
+            }
+        )
+
+    # --------------------------------------------------------
+    # RÉPONSE
+    # --------------------------------------------------------
+
+    return {
+        "status": "UPDATED",
+
+        "confirmation_verified": True,
+
+        "customer_id": customer_id,
+
+        "campaign_id": campaign_id,
+
+        "campaign_name": (
+            current_preview[
+                "campaign_name"
+            ]
+        ),
+
+        "resource_name": (
+            resource_name
+        ),
+
+        "preview_id": (
+            current_preview[
+                "preview_id"
+            ]
+        ),
+
+        "previous_configuration": (
+            previous_configuration
+        ),
+
+        "requested_configuration": (
+            proposed_configuration
+        ),
+
+        "verified_configuration": (
+            verified_configuration
+        ),
+
+        "strategy_verified": (
+            strategy_verified
+        ),
+
+        "verification_warnings": (
+            verification_warnings
+        ),
+
+        "changes": (
+            current_preview[
+                "changes"
+            ]
+        ),
+
+        "risk_level": (
+            current_preview[
+                "risk_level"
+            ]
+        ),
+
+        "message": (
+            "La stratégie d'enchères a été "
+            "modifiée dans Google Ads puis relue "
+            "pour vérification."
+        ),
+
+        "modification_applied": True,
+
+        "confirmation_required": False,
+
+        "next_action": (
+            "MONITOR_PERFORMANCE"
+        ),
     }
