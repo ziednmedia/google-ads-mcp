@@ -11,6 +11,9 @@ from campaigns.search import (
     router as search_router,
 )
 
+from models.bidding_models import (
+    AnalyzeStrategyChangeRequest,
+)
         
 class BudgetUpdateRequest(
         BaseModel
@@ -14460,5 +14463,50 @@ def bidding_strategy_insights(
             "error": str(error),
         }
 
+# ============================================================
+# ANALYZE BIDDING STRATEGY CHANGE
+# ============================================================
+
+@app.post(
+    "/analyze-strategy-change",
+    tags=["Bidding"]
+)
+def analyze_bidding_strategy_change(
+    request: AnalyzeStrategyChangeRequest
+):
+    """
+    Analyse une modification potentielle de stratégie
+    sans modifier Google Ads.
+    """
+
+    try:
+
+        client = get_google_ads_client()
+
+        data = analyze_strategy_change(
+            client=client,
+            request=request,
+        )
+
+        return {
+            "status": "SUCCESS",
+            **data,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+            "modification_applied": False,
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+            "modification_applied": False,
+        }
             
  
