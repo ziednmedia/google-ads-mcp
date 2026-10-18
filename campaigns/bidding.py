@@ -1494,6 +1494,48 @@ def analyze_strategy_change(
         elif target_action == "REMOVE":
 
             proposed_target_cpa = None
+            
+            if current_target_cpa is not None:
+
+                warnings.append(
+                    {
+                        "code": (
+                            "TARGET_CPA_REMOVAL_IMPACT"
+                        ),
+                        "message": (
+                            "La suppression du CPA cible "
+                            "donnera davantage de liberté "
+                            "à Maximiser les conversions. "
+                            "Les dépenses et le CPA réel "
+                            "pourraient augmenter."
+                        ),
+                        "current_target_cpa": (
+                            current_target_cpa
+                        ),
+                        "actual_cpa": actual_cpa,
+                    }
+                )
+
+            if (
+                current_strategy.get(
+                    "system_status"
+                )
+                == "LIMITED_BY_BUDGET"
+            ):
+
+                warnings.append(
+                    {
+                        "code": (
+                            "CAMPAIGN_LIMITED_BY_BUDGET"
+                        ),
+                        "message": (
+                            "La campagne est limitée par "
+                            "le budget. La suppression du "
+                            "CPA cible pourrait augmenter "
+                            "la consommation du budget."
+                        ),
+                    }
+                )
 
             observations.append(
                 {
