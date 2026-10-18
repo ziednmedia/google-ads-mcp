@@ -2632,8 +2632,12 @@ def preview_bidding_strategy_update(
         new_value,
     ):
         """
-        Calcule la différence absolue et
-        la variation en pourcentage.
+        Calcule la différence uniquement lorsque
+        les deux valeurs sont numériques.
+
+        Pour les chaînes de caractères comme
+        MAXIMIZE_CONVERSIONS ou MANUAL_CPC,
+        aucune différence numérique n'est calculée.
         """
 
         if (
@@ -2645,13 +2649,23 @@ def preview_bidding_strategy_update(
                 "difference_percent": None,
             }
 
-        old_number = float(
-            old_value
-        )
+        try:
+            old_number = float(
+                old_value
+            )
 
-        new_number = float(
-            new_value
-        )
+            new_number = float(
+                new_value
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return {
+                "difference": None,
+                "difference_percent": None,
+            }
 
         difference = round(
             new_number - old_number,
