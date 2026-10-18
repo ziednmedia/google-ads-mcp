@@ -171,3 +171,33 @@ class PreviewBiddingStrategyUpdateRequest(
     """
     pass
 
+class UpdateBiddingStrategyRequest(
+    PreviewBiddingStrategyUpdateRequest
+):
+    """
+    Requête de modification réelle d'une stratégie
+    d'enchères Google Ads.
+
+    Cette requête reprend les paramètres de la
+    prévisualisation et ajoute les éléments de sécurité.
+    """
+
+    preview_id: str = Field(
+        ...,
+        min_length=24,
+        max_length=24,
+        description=(
+            "Identifiant retourné par "
+            "preview-bidding-strategy-update."
+        ),
+    )
+
+    confirmation_code: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Code fourni explicitement par "
+            "l'utilisateur pour autoriser "
+            "la modification."
+        ),
+    )
