@@ -64,7 +64,36 @@ def get_bidding_strategy_details(
         )
 
     row = rows[0]
-# -------------------------------------------------------
+    # -------------------------------------------------------
+
+    # --------------------------------------------------------
+    # DEBUG TEMPORAIRE
+    # --------------------------------------------------------
+    
+    print("===== DEBUG TCPA =====")
+    
+    try:
+        print(
+            "maximize_conversions.target_cpa_micros =",
+            row.campaign.maximize_conversions.target_cpa_micros
+        )
+    except Exception as e:
+        print(
+            "MAX_CONV ERROR =",
+            str(e)
+        )
+    
+    try:
+        print(
+            "target_cpa.target_cpa_micros =",
+            row.campaign.target_cpa.target_cpa_micros
+        )
+    except Exception as e:
+        print(
+            "TARGET_CPA ERROR =",
+            str(e)
+        )
+    
     # --------------------------------------------------------
     # TARGET CPA
     # --------------------------------------------------------
@@ -75,7 +104,9 @@ def get_bidding_strategy_details(
     try:
     
         target_cpa_micros = int(
-            campaign.maximize_conversions.target_cpa_micros
+            row.campaign
+            .maximize_conversions
+            .target_cpa_micros
             or 0
         )
     
@@ -95,7 +126,9 @@ def get_bidding_strategy_details(
         try:
     
             target_cpa_micros = int(
-                campaign.target_cpa.target_cpa_micros
+                row.campaign
+                .target_cpa
+                .target_cpa_micros
                 or 0
             )
     
@@ -107,23 +140,11 @@ def get_bidding_strategy_details(
                 )
     
         except Exception:
-            pass   
-# --------------------------------------------------------
-   # target_cpa = None
+            pass
 
-    #try:
-        #if (
-            #row.campaign.target_cpa
-            #and row.campaign.target_cpa.target_cpa_micros
-        #):
-            #target_cpa = round(
-                #row.campaign.target_cpa.target_cpa_micros
-                #/ 1_000_000,
-                #2,
-            #)
-    #except Exception:
-        #target_cpa = None
-# --------------------------------------------------------
+    #--------------------------------------------------------------
+     
+
     target_roas = None
 
     try:
