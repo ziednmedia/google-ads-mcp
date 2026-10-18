@@ -1,9 +1,11 @@
+import hashlib
+import json
 from typing import Dict, Any
-
 from google.ads.googleads.client import GoogleAdsClient
 
 from models.bidding_models import (
     AnalyzeStrategyChangeRequest,
+    PreviewBiddingStrategyUpdateRequest,
     BiddingStrategyType,
     BiddingTargetAction,
 )
@@ -2437,4 +2439,708 @@ def analyze_strategy_change(
             if compatible
             else "CORRECT_REQUEST"
         ),
+    }
+
+# ============================================================
+# PREVIEW BIDDING STRATEGY UPDATE
+# ============================================================
+def preview_bidding_strategy_update(
+    client: GoogleAdsClient,
+    request: PreviewBiddingStrategyUpdateRequest,
+):
+    """
+    Prévisualise une modification de stratégie
+    d'enchères sans modifier Google Ads.
+
+    La fonction :
+    - relit la campagne dans Google Ads ;
+    - exécute l'analyse de compatibilité ;
+    - compare l'ancienne et la nouvelle configuration ;
+    - calcule les variations ;
+    - retourne un résumé prêt à présenter dans Copilot.
+
+    Aucun code de confirmation n'est demandé ici,
+    car aucune mutation n'est effectuée.
+    """
+
+    # --------------------------------------------------------
+    # REUTILISATION DE L'ANALYSE
+    # --------------------------------------------------------
+
+    analysis_request = (
+        AnalyzeStrategyChangeRequest(
+            **request.model_dump()
+        )
+    )
+
+    analysis = analyze_strategy_change(
+        client=client,
+        request=analysis_request,
+    )
+
+    # --------------------------------------------------------
+    # VERIFICATION DE L'ANALYSE
+    # --------------------------------------------------------
+
+    if not analysis.get(
+        "compatible",
+        False,
+    ):
+        return {
+            "customer_id": analysis.get(
+                "customer_id"
+            ),
+
+            "campaign_id": analysis.get(
+                "campaign_id"
+            ),
+
+            "campaign_name": analysis.get(
+                "campaign_name"
+            ),
+
+            "preview_status": "BLOCKED",
+
+            "compatible": False,
+
+            "errors": analysis.get(
+                "errors",
+                [],
+            ),
+
+            "warnings": analysis.get(
+                "warnings",
+                [],
+            ),
+
+            "observations": analysis.get(
+                "observations",
+                [],
+            ),
+
+            "recommendations": analysis.get(
+                "recommendations",
+                [],
+            ),
+
+            "modification_applied": False,
+
+            "confirmation_required": False,
+
+            "next_action": "CORRECT_REQUEST",
+
+            "message": (
+                "La modification ne peut pas être "
+                "prévisualisée tant que les erreurs "
+                "indiquées ne sont pas corrigées."
+            ),
+        }
+
+    # --------------------------------------------------------
+    # CONFIGURATIONS
+    # --------------------------------------------------------
+
+    current_configuration = (
+        analysis["current_configuration"]
+    )
+
+    proposed_configuration = (
+        analysis["proposed_configuration"]
+    )
+
+    current_strategy_type = (
+        current_configuration.get(
+            "strategy_type"
+        )
+    )
+
+    proposed_strategy_type = (
+        proposed_configuration.get(
+            "strategy_type"
+        )
+    )
+
+    current_target_cpa = (
+        current_configuration.get(
+            "target_cpa"
+        )
+    )
+
+    proposed_target_cpa = (
+        proposed_configuration.get(
+            "target_cpa"
+        )
+    )
+
+    current_target_roas_percent = (
+        current_configuration.get(
+            "target_roas_percent"
+        )
+    )
+
+    proposed_target_roas_percent = (
+        proposed_configuration.get(
+            "target_roas_percent"
+        )
+    )
+
+    current_cpc_bid_ceiling = (
+        current_configuration.get(
+            "cpc_bid_ceiling"
+        )
+    )
+
+    proposed_cpc_bid_ceiling = (
+        proposed_configuration.get(
+            "cpc_bid_ceiling"
+        )
+    )
+
+    current_impression_share = (
+        current_configuration.get(
+            "target_impression_share_percent"
+        )
+    )
+
+    proposed_impression_share = (
+        proposed_configuration.get(
+            "target_impression_share_percent"
+        )
+    )
+
+    current_impression_location = (
+        current_configuration.get(
+            "target_impression_location"
+        )
+    )
+
+    proposed_impression_location = (
+        proposed_configuration.get(
+            "target_impression_location"
+        )
+    )
+
+    # --------------------------------------------------------
+    # FONCTIONS INTERNES DE COMPARAISON
+    # --------------------------------------------------------
+
+    def calculate_difference(
+        old_value,
+        new_value,
+    ):
+        """
+        Calcule la différence absolue et
+        la variation en pourcentage.
+        """
+
+        if (
+            old_value is None
+            or new_value is None
+        ):
+            return {
+                "difference": None,
+                "difference_percent": None,
+            }
+
+        old_number = float(
+            old_value
+        )
+
+        new_number = float(
+            new_value
+        )
+
+        difference = round(
+            new_number - old_number,
+            2,
+        )
+
+        difference_percent = None
+
+        if old_number != 0:
+            difference_percent = round(
+                (
+                    difference
+                    / abs(old_number)
+                )
+                * 100,
+                2,
+            )
+
+        return {
+            "difference": difference,
+            "difference_percent": (
+                difference_percent
+            ),
+        }
+
+
+    def add_change(
+        changes,
+        field_name,
+        field_label,
+        old_value,
+        new_value,
+        unit=None,
+    ):
+        """
+        Ajoute un changement seulement si
+        l'ancienne et la nouvelle valeur diffèrent.
+        """
+
+        if old_value == new_value:
+            return
+
+        difference_data = (
+            calculate_difference(
+                old_value,
+                new_value,
+            )
+        )
+
+        if (
+            old_value is None
+            and new_value is not None
+        ):
+            change_type = "ADDED"
+
+        elif (
+            old_value is not None
+            and new_value is None
+        ):
+            change_type = "REMOVED"
+
+        else:
+            change_type = "UPDATED"
+
+        changes.append(
+            {
+                "field": field_name,
+
+                "label": field_label,
+
+                "change_type": (
+                    change_type
+                ),
+
+                "old_value": old_value,
+
+                "new_value": new_value,
+
+                "unit": unit,
+
+                "difference": (
+                    difference_data[
+                        "difference"
+                    ]
+                ),
+
+                "difference_percent": (
+                    difference_data[
+                        "difference_percent"
+                    ]
+                ),
+            }
+        )
+
+    # --------------------------------------------------------
+    # CONSTRUCTION DE LA LISTE DES CHANGEMENTS
+    # --------------------------------------------------------
+
+    changes = []
+
+    add_change(
+        changes=changes,
+        field_name="strategy_type",
+        field_label="Stratégie d'enchères",
+        old_value=current_strategy_type,
+        new_value=proposed_strategy_type,
+    )
+
+    add_change(
+        changes=changes,
+        field_name="target_cpa",
+        field_label="CPA cible",
+        old_value=current_target_cpa,
+        new_value=proposed_target_cpa,
+        unit="ACCOUNT_CURRENCY",
+    )
+
+    add_change(
+        changes=changes,
+        field_name="target_roas_percent",
+        field_label="ROAS cible",
+        old_value=(
+            current_target_roas_percent
+        ),
+        new_value=(
+            proposed_target_roas_percent
+        ),
+        unit="PERCENT",
+    )
+
+    add_change(
+        changes=changes,
+        field_name="cpc_bid_ceiling",
+        field_label="Limite CPC maximale",
+        old_value=(
+            current_cpc_bid_ceiling
+        ),
+        new_value=(
+            proposed_cpc_bid_ceiling
+        ),
+        unit="ACCOUNT_CURRENCY",
+    )
+
+    add_change(
+        changes=changes,
+        field_name=(
+            "target_impression_share_percent"
+        ),
+        field_label=(
+            "Part d'impressions cible"
+        ),
+        old_value=(
+            current_impression_share
+        ),
+        new_value=(
+            proposed_impression_share
+        ),
+        unit="PERCENT",
+    )
+
+    add_change(
+        changes=changes,
+        field_name=(
+            "target_impression_location"
+        ),
+        field_label=(
+            "Emplacement d'impression cible"
+        ),
+        old_value=(
+            current_impression_location
+        ),
+        new_value=(
+            proposed_impression_location
+        ),
+    )
+
+    # --------------------------------------------------------
+    # IDENTIFICATION DES CHANGEMENTS SENSIBLES
+    # --------------------------------------------------------
+
+    sensitive_changes = []
+
+    for change in changes:
+
+        field_name = change["field"]
+
+        difference_percent = (
+            change.get(
+                "difference_percent"
+            )
+        )
+
+        if field_name == "strategy_type":
+
+            sensitive_changes.append(
+                {
+                    "field": field_name,
+                    "severity": "HIGH",
+                    "message": (
+                        "Le type de stratégie "
+                        "d'enchères sera remplacé."
+                    ),
+                }
+            )
+
+        elif (
+            field_name == "target_cpa"
+            and difference_percent
+            is not None
+            and abs(
+                difference_percent
+            ) >= 20
+        ):
+
+            sensitive_changes.append(
+                {
+                    "field": field_name,
+                    "severity": "MEDIUM",
+                    "message": (
+                        "Le CPA cible changera de "
+                        f"{difference_percent} %."
+                    ),
+                }
+            )
+
+        elif (
+            field_name
+            == "target_roas_percent"
+            and difference_percent
+            is not None
+            and abs(
+                difference_percent
+            ) >= 20
+        ):
+
+            sensitive_changes.append(
+                {
+                    "field": field_name,
+                    "severity": "MEDIUM",
+                    "message": (
+                        "Le ROAS cible changera de "
+                        f"{difference_percent} %."
+                    ),
+                }
+            )
+
+        elif (
+            change["change_type"]
+            == "REMOVED"
+        ):
+
+            sensitive_changes.append(
+                {
+                    "field": field_name,
+                    "severity": "MEDIUM",
+                    "message": (
+                        f"La valeur "
+                        f"{change['label']} "
+                        "sera supprimée."
+                    ),
+                }
+            )
+
+    # --------------------------------------------------------
+    # RISQUE FINAL
+    # --------------------------------------------------------
+
+    analysis_risk_level = (
+        analysis.get(
+            "risk_level",
+            "LOW",
+        )
+    )
+
+    preview_risk_level = (
+        analysis_risk_level
+    )
+
+    if any(
+        item["severity"] == "HIGH"
+        for item in sensitive_changes
+    ):
+        preview_risk_level = "HIGH"
+
+    elif (
+        sensitive_changes
+        and preview_risk_level == "LOW"
+    ):
+        preview_risk_level = "MEDIUM"
+
+    # --------------------------------------------------------
+    # DETECTION D'UNE ABSENCE DE CHANGEMENT
+    # --------------------------------------------------------
+
+    no_change_detected = (
+        len(changes) == 0
+    )
+
+    if no_change_detected:
+        preview_status = "NO_CHANGE"
+
+        next_action = "NO_ACTION_REQUIRED"
+
+        confirmation_required = False
+
+        message = (
+            "La configuration proposée est "
+            "identique à la configuration actuelle. "
+            "Aucune modification n'est nécessaire."
+        )
+
+    else:
+        preview_status = "READY_FOR_CONFIRMATION"
+
+        next_action = (
+            "REQUEST_CONFIRMATION_CODE"
+        )
+
+        confirmation_required = True
+
+        message = (
+            "La prévisualisation est prête. "
+            "Aucune modification n'a été appliquée. "
+            "Une confirmation explicite et le code "
+            "de confirmation seront requis avant "
+            "l'exécution."
+        )
+
+    # --------------------------------------------------------
+    # IDENTIFIANT DE PREVISUALISATION
+    # --------------------------------------------------------
+
+    preview_payload = {
+        "customer_id": analysis[
+            "customer_id"
+        ],
+
+        "campaign_id": analysis[
+            "campaign_id"
+        ],
+
+        "current_configuration": (
+            current_configuration
+        ),
+
+        "proposed_configuration": (
+            proposed_configuration
+        ),
+
+        "changes": changes,
+    }
+
+    preview_payload_json = json.dumps(
+        preview_payload,
+        sort_keys=True,
+        default=str,
+        ensure_ascii=True,
+    )
+
+    preview_id = hashlib.sha256(
+        preview_payload_json.encode(
+            "utf-8"
+        )
+    ).hexdigest()[:24]
+
+    # --------------------------------------------------------
+    # RESUME LISIBLE
+    # --------------------------------------------------------
+
+    readable_summary = (
+        f"Campagne : "
+        f"{analysis['campaign_name']}. "
+        f"Stratégie actuelle : "
+        f"{current_strategy_type}. "
+        f"Stratégie proposée : "
+        f"{proposed_strategy_type}. "
+    )
+
+    if no_change_detected:
+        readable_summary += (
+            "Aucun changement n'a été détecté."
+        )
+
+    else:
+        readable_summary += (
+            f"{len(changes)} changement"
+            + (
+                "s"
+                if len(changes) > 1
+                else ""
+            )
+            + " sera"
+            + (
+                "nt"
+                if len(changes) > 1
+                else ""
+            )
+            + " soumis à confirmation."
+        )
+
+    # --------------------------------------------------------
+    # REPONSE
+    # --------------------------------------------------------
+
+    return {
+        "customer_id": analysis[
+            "customer_id"
+        ],
+
+        "campaign_id": analysis[
+            "campaign_id"
+        ],
+
+        "campaign_name": analysis[
+            "campaign_name"
+        ],
+
+        "campaign_status": analysis[
+            "campaign_status"
+        ],
+
+        "channel_type": analysis[
+            "channel_type"
+        ],
+
+        "period": analysis[
+            "period"
+        ],
+
+        "preview_id": preview_id,
+
+        "preview_status": (
+            preview_status
+        ),
+
+        "compatible": True,
+
+        "current_configuration": (
+            current_configuration
+        ),
+
+        "proposed_configuration": (
+            proposed_configuration
+        ),
+
+        "changes_count": len(
+            changes
+        ),
+
+        "changes": changes,
+
+        "sensitive_changes": (
+            sensitive_changes
+        ),
+
+        "performance": analysis[
+            "performance"
+        ],
+
+        "risk_level": (
+            preview_risk_level
+        ),
+
+        "errors": analysis.get(
+            "errors",
+            [],
+        ),
+
+        "warnings": analysis.get(
+            "warnings",
+            [],
+        ),
+
+        "observations": analysis.get(
+            "observations",
+            [],
+        ),
+
+        "recommendations": analysis.get(
+            "recommendations",
+            [],
+        ),
+
+        "summary": readable_summary,
+
+        "message": message,
+
+        "modification_applied": False,
+
+        "confirmation_required": (
+            confirmation_required
+        ),
+
+        "next_action": next_action,
     }
