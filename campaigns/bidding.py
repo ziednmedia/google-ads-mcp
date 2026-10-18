@@ -3559,6 +3559,143 @@ def update_bidding_strategy(
         )
 
     # --------------------------------------------------------
+    # ---------------------------------------------------------------------------------------- changement ---------------------------------------------------------------------....----
+    # --------------------------------------------------------
+    # --------------------------------------------------------
+    # MAXIMISER LES CONVERSIONS / CPA CIBLE
+    # --------------------------------------------------------
+    
+    if strategy_type == "MAXIMIZE_CONVERSIONS":
+    
+        maximize_conversions = client.get_type(
+            "MaximizeConversions"
+        )
+    
+        if target_action == "SET":
+    
+            if target_cpa is None:
+                raise ValueError(
+                    "Le CPA cible est obligatoire "
+                    "lorsque target_action vaut SET."
+                )
+    
+            if float(target_cpa) <= 0:
+                raise ValueError(
+                    "Le CPA cible doit être supérieur à zéro."
+                )
+    
+            target_cpa_micros = int(
+                round(
+                    float(target_cpa)
+                    * 1_000_000
+                )
+            )
+    
+            maximize_conversions.target_cpa_micros = (
+                target_cpa_micros
+            )
+    
+            campaign.maximize_conversions = (
+                maximize_conversions
+            )
+    
+            # Important :
+            # ne pas ajouter "maximize_conversions"
+            # dans le masque, car ce champ contient
+            # des sous-champs.
+            update_paths.append(
+                "maximize_conversions."
+                "target_cpa_micros"
+            )
+    
+        elif target_action == "REMOVE":
+    
+            campaign.maximize_conversions = (
+                maximize_conversions
+            )
+    
+            # Le champ est inclus dans le masque
+            # sans valeur afin de supprimer le CPA cible.
+            update_paths.append(
+                "maximize_conversions."
+                "target_cpa_micros"
+            )
+    
+        elif target_action in {
+            "INCREASE_PERCENT",
+            "DECREASE_PERCENT",
+        }:
+    
+            if target_cpa is None:
+                raise ValueError(
+                    "Le CPA cible calculé est manquant."
+                )
+    
+            if float(target_cpa) <= 0:
+                raise ValueError(
+                    "Le CPA cible calculé doit être "
+                    "supérieur à zéro."
+                )
+    
+            target_cpa_micros = int(
+                round(
+                    float(target_cpa)
+                    * 1_000_000
+                )
+            )
+    
+            maximize_conversions.target_cpa_micros = (
+                target_cpa_micros
+            )
+    
+            campaign.maximize_conversions = (
+                maximize_conversions
+            )
+    
+            update_paths.append(
+                "maximize_conversions."
+                "target_cpa_micros"
+            )
+    
+        elif target_action == "KEEP":
+    
+            if target_cpa is not None:
+    
+                target_cpa_micros = int(
+                    round(
+                        float(target_cpa)
+                        * 1_000_000
+                    )
+                )
+    
+                maximize_conversions.target_cpa_micros = (
+                    target_cpa_micros
+                )
+    
+            campaign.maximize_conversions = (
+                maximize_conversions
+            )
+    
+            update_paths.append(
+                "maximize_conversions."
+                "target_cpa_micros"
+            )
+    
+        else:
+            raise ValueError(
+                "Action CPA cible non reconnue. "
+                "Valeurs acceptées : SET, REMOVE, "
+                "KEEP, INCREASE_PERCENT ou "
+                "DECREASE_PERCENT."
+            )
+        
+
+    
+    # --------------------------------------------------------
+    # ---------------------------------------------------------------------------------------- fin changement -------------------------------------------------------------------------
+    # --------------------------------------------------------
+
+    # --------------------------------------------------------
     # TAUX D'IMPRESSIONS CIBLE
     # --------------------------------------------------------
 
