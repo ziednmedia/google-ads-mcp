@@ -14353,7 +14353,49 @@ def bidding_strategy_details(
             "error": str(error),
         }
 
+# ============================================================
+# BIDDING STRATEGIES
+# ============================================================
 
+@app.get(
+    "/bidding-strategies",
+    tags=["Bidding"]
+)
+def bidding_strategies(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        client = get_google_ads_client()
+
+        return {
+            "status": "SUCCESS",
+            **get_bidding_strategies(
+                client=client,
+                customer_id=customer_id,
+            ),
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
 
 
             
