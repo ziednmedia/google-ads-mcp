@@ -32,8 +32,15 @@ def get_bidding_strategy_details(
             campaign.status,
             campaign.bidding_strategy_type,
             campaign.bidding_strategy,
+        
+            campaign.maximize_conversions.target_cpa_micros,
+        
             campaign.target_cpa.target_cpa_micros,
+        
+            campaign.maximize_conversion_value.target_roas,
+        
             campaign.target_roas.target_roas,
+        
             campaign.manual_cpc.enhanced_cpc_enabled
         FROM campaign
         WHERE campaign.id = {campaign_id}
@@ -57,22 +64,66 @@ def get_bidding_strategy_details(
         )
 
     row = rows[0]
-
+# -------------------------------------------------------
+    # --------------------------------------------------------
+    # TARGET CPA
+    # --------------------------------------------------------
+    
     target_cpa = None
-
+    
+    # Maximize Conversions + Target CPA
     try:
-        if (
-            row.campaign.target_cpa
-            and row.campaign.target_cpa.target_cpa_micros
-        ):
+    
+        target_cpa_micros = int(
+            campaign.maximize_conversions.target_cpa_micros
+            or 0
+        )
+    
+        if target_cpa_micros > 0:
+    
             target_cpa = round(
-                row.campaign.target_cpa.target_cpa_micros
-                / 1_000_000,
+                target_cpa_micros / 1_000_000,
                 2,
             )
+    
     except Exception:
-        target_cpa = None
+        pass
+    
+    # Legacy Target CPA
+    if target_cpa is None:
+    
+        try:
+    
+            target_cpa_micros = int(
+                campaign.target_cpa.target_cpa_micros
+                or 0
+            )
+    
+            if target_cpa_micros > 0:
+    
+                target_cpa = round(
+                    target_cpa_micros / 1_000_000,
+                    2,
+                )
+    
+        except Exception:
+            pass   
+# --------------------------------------------------------
+   # target_cpa = None
 
+    #try:
+        #if (
+            #row.campaign.target_cpa
+            #and row.campaign.target_cpa.target_cpa_micros
+        #):
+            #target_cpa = round(
+                #row.campaign.target_cpa.target_cpa_micros
+                #/ 1_000_000,
+                #2,
+            #)
+    #except Exception:
+        #target_cpa = None
+# --------------------------------------------------------
     target_roas = None
 
     try:
