@@ -24,14 +24,7 @@ class BiddingStrategyType(str, Enum):
         "TARGET_IMPRESSION_SHARE"
     )
 
-class PreviewBiddingStrategyUpdateRequest(
-    AnalyzeStrategyChangeRequest
-):
-    """
-    Requête de prévisualisation d'une modification
-    de stratégie d'enchères.
-    """
-    pass
+
 
 class BiddingStrategyDetailsRequest(BaseModel):
     customer_id: str
@@ -169,4 +162,12 @@ class AnalyzeStrategyChangeRequest(BaseModel):
         ),
     )
 
+class PreviewBiddingStrategyUpdateRequest(
+    AnalyzeStrategyChangeRequest
+):
+    """
+    Requête de prévisualisation d'une modification
+    de stratégie d'enchères.
+    """
+    pass
 
