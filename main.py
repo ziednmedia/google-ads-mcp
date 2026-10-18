@@ -5,7 +5,14 @@ from datetime import date
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 from google.ads.googleads.client import GoogleAdsClient
-from campaigns.bidding import *
+
+from campaigns.bidding import (
+    get_bidding_strategy_details,
+    get_bidding_strategies,
+    get_bidding_strategy_insights,
+    analyze_strategy_change,
+    preview_bidding_strategy_update,
+)
 
 from campaigns.search import (
     router as search_router,
