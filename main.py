@@ -115,7 +115,7 @@ app = FastAPI(
         "API Google Ads en lecture seule pour analyser les campagnes "
         "et identifier des opportunités d'optimisation."
     ),
-    openapi_version="3.0.2",
+    
 )
 
 app.include_router(
