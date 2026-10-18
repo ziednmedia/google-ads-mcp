@@ -3464,10 +3464,6 @@ def update_bidding_strategy(
         )
 
         update_paths.append(
-            "maximize_conversions"
-        )
-
-        update_paths.append(
             "maximize_conversions."
             "target_cpa_micros"
         )
@@ -3503,12 +3499,11 @@ def update_bidding_strategy(
         )
 
         update_paths.append(
-            "maximize_conversion_value"
+            "maximize_conversion_value."
+            "target_roas"
         )
 
-        update_paths.append(
-            "maximize_conversion_value.target_roas"
-        )
+        
 
     # --------------------------------------------------------
     # MAXIMISER LES CLICS
@@ -3535,18 +3530,15 @@ def update_bidding_strategy(
         )
 
         update_paths.append(
-            "target_spend"
-        )
-
-        update_paths.append(
             "target_spend."
             "cpc_bid_ceiling_micros"
         )
 
+        
+
     # --------------------------------------------------------
     # CPC MANUEL
     # --------------------------------------------------------
-
     elif strategy_type == "MANUAL_CPC":
 
         manual_cpc = client.get_type(
@@ -3559,10 +3551,8 @@ def update_bidding_strategy(
             manual_cpc
         )
 
-        update_paths.append(
-            "manual_cpc"
-        )
-
+        # Ne pas ajouter "manual_cpc" au masque.
+        # Ce champ contient des sous-champs.
         update_paths.append(
             "manual_cpc."
             "enhanced_cpc_enabled"
@@ -3656,10 +3646,6 @@ def update_bidding_strategy(
 
         campaign.target_impression_share = (
             target_impression_share
-        )
-
-        update_paths.append(
-            "target_impression_share"
         )
 
         update_paths.append(
