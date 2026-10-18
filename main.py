@@ -12,6 +12,7 @@ from campaigns.bidding import (
     get_bidding_strategy_insights,
     analyze_strategy_change,
     preview_bidding_strategy_update,
+    update_bidding_strategy,
 )
 
 from campaigns.search import (
@@ -21,6 +22,7 @@ from campaigns.search import (
 from models.bidding_models import (
     AnalyzeStrategyChangeRequest,
     PreviewBiddingStrategyUpdateRequest,
+    UpdateBiddingStrategyRequest,
 )
         
 class BudgetUpdateRequest(
@@ -14562,5 +14564,55 @@ def preview_bidding_strategy_update_endpoint(
             "error": str(error),
             "modification_applied": False,
         }
-            
- 
+
+# ============================================================
+# UPDATE BIDDING STRATEGY
+# ============================================================
+
+@app.post(
+    "/update-bidding-strategy",
+    tags=["Bidding"]
+)
+def update_bidding_strategy_endpoint(
+    request: UpdateBiddingStrategyRequest
+):
+    """
+    Modifie une stratégie d'enchères après
+    prévisualisation et confirmation.
+    """
+
+    try:
+
+        client = get_google_ads_client()
+
+        return update_bidding_strategy(
+            client=client,
+            request=request,
+        )
+
+    except PermissionError as error:
+
+        return {
+            "status": "FORBIDDEN",
+            "error": str(error),
+            "confirmation_verified": False,
+            "modification_applied": False,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+            "confirmation_verified": False,
+            "modification_applied": False,
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+            "confirmation_verified": False,
+            "modification_applied": False,
+        }
