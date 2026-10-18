@@ -14395,7 +14395,70 @@ def bidding_strategies(
             "status": "FAILED",
             "error": str(error),
         }
+        
+# ============================================================
+# BIDDING STRATEGY INSIGHTS
+# ============================================================
 
+@app.get(
+    "/bidding-strategy-insights",
+    tags=["Bidding"]
+)
+def bidding_strategy_insights(
+    customer_id: str = Query(
+        ...,
+        description="ID du compte Google Ads",
+    ),
+    campaign_id: str = Query(
+        ...,
+        description="ID de la campagne",
+    ),
+    period: str = Query(
+        default="LAST_30_DAYS",
+        description=(
+            "Période Google Ads prédéfinie."
+        ),
+    ),
+):
+    try:
+
+        customer_id = normalize_customer_id(
+            customer_id
+        )
+
+        campaign_id = (
+            campaign_id
+            .replace("-", "")
+            .strip()
+        )
+
+        client = get_google_ads_client()
+
+        data = get_bidding_strategy_insights(
+            client=client,
+            customer_id=customer_id,
+            campaign_id=campaign_id,
+            period=period,
+        )
+
+        return {
+            "status": "SUCCESS",
+            **data,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+        }
 
             
  
