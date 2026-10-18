@@ -13,6 +13,7 @@ from campaigns.search import (
 
 from models.bidding_models import (
     AnalyzeStrategyChangeRequest,
+    PreviewBiddingStrategyUpdateRequest,
 )
         
 class BudgetUpdateRequest(
@@ -14484,6 +14485,52 @@ def analyze_bidding_strategy_change(
         client = get_google_ads_client()
 
         data = analyze_strategy_change(
+            client=client,
+            request=request,
+        )
+
+        return {
+            "status": "SUCCESS",
+            **data,
+        }
+
+    except ValueError as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+            "modification_applied": False,
+        }
+
+    except Exception as error:
+
+        return {
+            "status": "FAILED",
+            "error": str(error),
+            "modification_applied": False,
+        }
+
+# ============================================================
+# PREVIEW BIDDING STRATEGY UPDATE
+# ============================================================
+
+@app.post(
+    "/preview-bidding-strategy-update",
+    tags=["Bidding"]
+)
+def preview_bidding_strategy_update_endpoint(
+    request: PreviewBiddingStrategyUpdateRequest
+):
+    """
+    Prévisualise une modification de stratégie
+    d'enchères sans modifier Google Ads.
+    """
+
+    try:
+
+        client = get_google_ads_client()
+
+        data = preview_bidding_strategy_update(
             client=client,
             request=request,
         )
